@@ -17,7 +17,9 @@ Mouse and touch only — no keyboard:
   cost every second — and unlike every other action, this one isn't a
   soft penalty: running out mid-flight forces a landing immediately, even
   if you keep holding. Let go and hold again once it's recovered.
-- **Right-click / swipe right** — attack.
+- **Right-click / swipe** — attack toward whichever side of the character
+  it was aimed at: right-click to their right (or swipe right) attacks
+  right, right-click to their left (or swipe left) attacks left.
 - Click/tap anywhere to dismiss the death/win screen and restart.
 
 Power-ups (collected by running into their glowing orb):

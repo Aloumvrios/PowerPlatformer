@@ -310,8 +310,9 @@ export class Game {
     if (this.attackFlash > 0) {
       this.attackFlash = Math.max(0, this.attackFlash - dt);
     }
-    if (consumeAttack() && this.attackCooldown <= 0) {
-      this.performAttack(depleted);
+    const attackDir = consumeAttack(p.x + p.w / 2 - this.cameraX);
+    if (attackDir !== null && this.attackCooldown <= 0) {
+      this.performAttack(depleted, attackDir);
     }
 
     if (p.onGround) {
@@ -405,15 +406,16 @@ export class Game {
     this.loseLife();
   }
 
-  private performAttack(depleted: boolean): void {
+  private performAttack(depleted: boolean, dir: 1 | -1): void {
     const p = this.player;
     this.attackCooldown = ATTACK_COOLDOWN_SEC;
     this.attackFlash = ATTACK_FLASH_SEC;
     this.fartingPower = Math.max(0, this.fartingPower - FARTING_ATTACK_COST);
+    p.facing = dir;
 
     const range = ATTACK_RANGE * (depleted ? DEPLETED_ATTACK_RANGE_MULT : 1);
     const hitbox: Rect =
-      p.facing === 1
+      dir === 1
         ? { x: p.x + p.w, y: p.y, w: range, h: p.h }
         : { x: p.x - range, y: p.y, w: range, h: p.h };
 

@@ -4,7 +4,8 @@
 //   double-click / double-tap  -> strong aimed launch toward that point (jump)
 //   press and hold (no release)-> fly toward the pointer, full manual control,
 //                                 for as long as it's held
-//   right-click / swipe right  -> attack
+//   right-click / swipe        -> attack, toward whichever side of the
+//                                 player the click/swipe was on
 //
 // A press is only resolved once we know which of these it is: released
 // quickly -> a tap; released after sitting still past HOLD_THRESHOLD_MS ->
@@ -33,7 +34,12 @@ const HOLD_STATIONARY_PX = 18;
 
 let pendingClickTarget: Point | null = null;
 let pendingJumpTarget: Point | null = null;
-let pendingAttack = false;
+// A swipe already carries its own direction; a right-click doesn't — its
+// direction depends on which side of the player it landed on, which only
+// game.ts knows (it has the player's position), so that one is resolved
+// lazily by consumeAttack() instead of at the moment of the click.
+let pendingAttackDir: 1 | -1 | null = null;
+let pendingAttackClickX: number | null = null;
 let flyTarget: Point | null = null; // live, while any pointer is holding
 
 function getCanvas(): HTMLCanvasElement | null {
@@ -146,8 +152,8 @@ function endPointer(e: PointerEvent): void {
   const dy = e.clientY - st.startY;
   const dt = performance.now() - st.startTime;
 
-  if (st.isTouch && dx > SWIPE_MIN_DX && Math.abs(dy) < SWIPE_MAX_DY && dt < SWIPE_MAX_MS) {
-    pendingAttack = true;
+  if (st.isTouch && Math.abs(dx) > SWIPE_MIN_DX && Math.abs(dy) < SWIPE_MAX_DY && dt < SWIPE_MAX_MS) {
+    pendingAttackDir = dx > 0 ? 1 : -1;
     return;
   }
 
@@ -167,7 +173,7 @@ window.addEventListener("pointercancel", (e) => {
 
 window.addEventListener("contextmenu", (e) => {
   e.preventDefault();
-  pendingAttack = true;
+  pendingAttackClickX = canvasLocalPoint(e.clientX, e.clientY).x;
 });
 
 // --- consumers ------------------------------------------------------------
@@ -186,12 +192,22 @@ export function consumeJump(): Point | null {
   return target;
 }
 
-export function consumeAttack(): boolean {
-  if (pendingAttack) {
-    pendingAttack = false;
-    return true;
+// Resolves and clears any pending attack request, returning which side to
+// attack (1 = right, -1 = left) or null if none is pending. A swipe already
+// knows its own direction; a right-click's direction is resolved here
+// against the player's current on-screen x, passed in by the caller.
+export function consumeAttack(playerScreenX: number): 1 | -1 | null {
+  if (pendingAttackDir !== null) {
+    const dir = pendingAttackDir;
+    pendingAttackDir = null;
+    return dir;
   }
-  return false;
+  if (pendingAttackClickX !== null) {
+    const dir = pendingAttackClickX >= playerScreenX ? 1 : -1;
+    pendingAttackClickX = null;
+    return dir;
+  }
+  return null;
 }
 
 // Live canvas-local point to fly toward while a press is being held, or null
@@ -203,9 +219,14 @@ export function getFlyTarget(): Point | null {
 // Any pending discrete action — used to dismiss the death/win overlay and
 // restart. A held press alone (no discrete action yet) does not count.
 export function consumeAnyAction(): boolean {
-  const had = pendingClickTarget !== null || pendingJumpTarget !== null || pendingAttack;
+  const had =
+    pendingClickTarget !== null ||
+    pendingJumpTarget !== null ||
+    pendingAttackDir !== null ||
+    pendingAttackClickX !== null;
   pendingClickTarget = null;
   pendingJumpTarget = null;
-  pendingAttack = false;
+  pendingAttackDir = null;
+  pendingAttackClickX = null;
   return had;
 }
