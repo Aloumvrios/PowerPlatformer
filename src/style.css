@@ -1,6 +1,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   background: #eaf4fb;
   color: #1b1d3a;
   font-family: system-ui, sans-serif;
@@ -8,9 +9,24 @@ body {
   touch-action: none;
 }
 
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
 #game {
+  /* Sized in px by main.ts's fitCanvas(), which keeps the 960x540 aspect
+     ratio while fitting the real viewport — without it the canvas renders
+     at its raw 960x540 attribute size unscaled and, on a narrower mobile
+     screen, overflows and gets clipped by html/body's overflow: hidden.
+     That clips off whatever world-x range falls outside the visible
+     slice, including the player's spawn point, and the camera (which
+     scrolls based on the full 960px-wide internal viewport) only catches
+     up to that slice well after the player has already walked past what's
+     visible — reading as "stuck at the edge of the screen". */
   display: block;
-  margin: 0 auto;
   background: #bfe3f7;
   image-rendering: pixelated;
   touch-action: none;
