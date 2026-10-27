@@ -1,4 +1,4 @@
-import { consumeHopDirection, consumeJump, consumeAttack, consumeAnyAction } from "./input";
+import { consumeClickX, consumeJump, consumeAttack, consumeAnyAction } from "./input";
 import { level1 } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import type { ActivePower, Enemy, Level, PickupKind, PowerKind, Rect } from "./types";
@@ -156,8 +156,10 @@ export class Game {
     const p = this.player;
     const flying = this.hasPower("fly");
 
-    const hopInput = consumeHopDirection();
-    if (hopInput !== null && this.hopTimeRemaining <= 0) {
+    const clickX = consumeClickX();
+    if (clickX !== null && this.hopTimeRemaining <= 0) {
+      const playerScreenX = p.x + p.w / 2 - this.cameraX;
+      const hopInput: 1 | -1 = clickX < playerScreenX ? -1 : 1;
       this.hopDir = hopInput;
       this.hopTimeRemaining = HOP_DURATION;
       p.facing = hopInput;

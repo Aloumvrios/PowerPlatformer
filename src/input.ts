@@ -1,11 +1,20 @@
 // Mouse- and touch-only controls. No keyboard.
 //
-//   single click / tap (left/right half of the canvas) -> hop in that direction
-//   double-click / double-tap                           -> jump
-//   right-click / swipe right                            -> attack
+//   single click / tap  -> hop toward that point (relative to the player's
+//                           current on-screen position, not a fixed screen
+//                           half — otherwise a click right of the player
+//                           near the start of a level, where the camera is
+//                           clamped and the player sits near the left edge
+//                           of the canvas, could land in the "left half"
+//                           and hop the wrong way)
+//   double-click / double-tap -> jump
+//   right-click / swipe right -> attack
 //
 // Each action is a one-shot flag, consumed (and cleared) by game.ts once per
-// frame via the consume* functions below.
+// frame via the consume* functions below. Click/tap positions are reported
+// in the canvas's own internal pixel space (its width/height attributes),
+// not raw page coordinates, so game.ts can compare them directly against
+// player.x.
 
 const DOUBLE_CLICK_MS = 300;
 const DOUBLE_MAX_DX = 80;
@@ -13,7 +22,7 @@ const SWIPE_MIN_DX = 40;
 const SWIPE_MAX_DY = 60;
 const SWIPE_MAX_MS = 400;
 
-let pendingHopDir: 1 | -1 | null = null;
+let pendingClickX: number | null = null;
 let pendingJump = false;
 let pendingAttack = false;
 
@@ -21,10 +30,13 @@ function getCanvas(): HTMLCanvasElement | null {
   return document.getElementById("game") as HTMLCanvasElement | null;
 }
 
-function dirForX(clientX: number): 1 | -1 {
-  const rect = getCanvas()?.getBoundingClientRect();
-  const midX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-  return clientX < midX ? -1 : 1;
+// Convert a page-space clientX into the canvas's internal pixel space.
+function canvasLocalX(clientX: number): number {
+  const canvas = getCanvas();
+  if (!canvas) return clientX;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return clientX;
+  return ((clientX - rect.left) / rect.width) * canvas.width;
 }
 
 // --- mouse ------------------------------------------------------------
@@ -39,7 +51,7 @@ window.addEventListener("mousedown", (e) => {
     pendingJump = true;
     lastClickTime = 0;
   } else {
-    pendingHopDir = dirForX(e.clientX);
+    pendingClickX = canvasLocalX(e.clientX);
     lastClickTime = now;
     lastClickX = e.clientX;
   }
@@ -94,7 +106,7 @@ function endTouch(e: TouchEvent): void {
       pendingJump = true;
       lastTapTime = 0;
     } else {
-      pendingHopDir = dirForX(t.clientX);
+      pendingClickX = canvasLocalX(t.clientX);
       lastTapTime = now;
       lastTapX = t.clientX;
     }
@@ -108,10 +120,12 @@ window.addEventListener("touchcancel", (e) => {
 
 // --- consumers ------------------------------------------------------------
 
-export function consumeHopDirection(): 1 | -1 | null {
-  const d = pendingHopDir;
-  pendingHopDir = null;
-  return d;
+// Canvas-local x of a pending click/tap, or null. Compare against the
+// player's own on-screen x to decide which way to hop.
+export function consumeClickX(): number | null {
+  const x = pendingClickX;
+  pendingClickX = null;
+  return x;
 }
 
 export function consumeJump(): boolean {
@@ -132,8 +146,8 @@ export function consumeAttack(): boolean {
 
 // Any pending action — used to dismiss the death/win overlay and restart.
 export function consumeAnyAction(): boolean {
-  const had = pendingHopDir !== null || pendingJump || pendingAttack;
-  pendingHopDir = null;
+  const had = pendingClickX !== null || pendingJump || pendingAttack;
+  pendingClickX = null;
   pendingJump = false;
   pendingAttack = false;
   return had;
