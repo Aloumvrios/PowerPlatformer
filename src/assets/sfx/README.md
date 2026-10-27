@@ -18,6 +18,9 @@ its synth version.
 | `bean`       | collecting a bean (pitch rises with quick combos)     |
 | `pickup`     | collecting a power-up                                 |
 | `beansoup`   | collecting bean soup                                  |
+| `banana`     | eating a banana                                       |
+| `rumble`     | stomach growls while Holding Power is low             |
+| `accident`   | Holding Power runs out (costs a life)                 |
 | `shield`     | shield absorbs a hit                                  |
 | `enemy`      | enemy defeated                                        |
 | `death`      | losing a life                                         |

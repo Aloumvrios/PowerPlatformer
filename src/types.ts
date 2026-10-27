@@ -34,6 +34,12 @@ export interface Bean extends Rect {
   collected: boolean;
 }
 
+// Bananas refill Holding Power (they're constipating) at the cost of a
+// little Farting Power. Like beans, they stay eaten after a respawn.
+export interface Banana extends Rect {
+  collected: boolean;
+}
+
 // Touching one makes it the respawn point for the rest of the run.
 export interface Checkpoint extends Rect {
   reached: boolean;
@@ -57,6 +63,7 @@ export interface Level {
   powerUps: PowerUp[];
   enemies: Enemy[];
   beans: Bean[];
+  bananas: Banana[];
   checkpoints: Checkpoint[];
   hints: Hint[];
   goal: Rect; // drawn as the toilet

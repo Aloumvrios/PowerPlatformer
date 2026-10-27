@@ -563,6 +563,53 @@ export function drawBean(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   ctx.restore();
 }
 
+// A curved banana: a crescent with brown tips and a hatch-shaded inner edge.
+export function drawBanana(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, angle: number, seed: number): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = Math.max(1.2, s * 0.08);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.fillStyle = "#f5d33b";
+  ctx.beginPath();
+  ctx.moveTo(-s, -s * 0.45);
+  ctx.quadraticCurveTo(-s * 0.15, s * 1.25, s * 0.95, -s * 0.5);
+  ctx.quadraticCurveTo(0, s * 0.2, -s, -s * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Hatched shadow along the belly, then a ridge line.
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = "#e0a91f";
+  ctx.beginPath();
+  ctx.moveTo(-s, -s * 0.2);
+  ctx.quadraticCurveTo(-s * 0.15, s * 1.25, s * 0.95, -s * 0.25);
+  ctx.lineTo(s, s);
+  ctx.lineTo(-s, s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = Math.max(1, s * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.7, -s * 0.2);
+  ctx.quadraticCurveTo(-s * 0.1, s * 0.75, s * 0.7, -s * 0.3);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // Stem and tip.
+  ctx.strokeStyle = "#6b4a1e";
+  ctx.lineWidth = Math.max(1.5, s * 0.16);
+  sketchLine(ctx, s * 0.9, -s * 0.5, s * 1.08, -s * 0.8, seed, 0.3);
+  ctx.fillStyle = "#6b4a1e";
+  ctx.beginPath();
+  ctx.arc(-s * 0.98, -s * 0.45, s * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // --- enemy ---------------------------------------------------------------
 
 // A spiky, bobbing urchin whose eyes follow the player. `squash` (0..1)

@@ -16,6 +16,9 @@ export type SfxName =
   | "pickup"
   | "bean"
   | "beansoup"
+  | "banana"
+  | "rumble"
+  | "accident"
   | "shield"
   | "death"
   | "checkpoint"
@@ -252,6 +255,18 @@ export function sfx(name: SfxName, intensity = 1, pitch = 1): void {
       noiseBurst(0.25, 0.25, 400, 0, 1200); // glug
       [392, 494, 587, 784].forEach((f, i) => tone(f, 0.12, 0.18, "triangle", 0.15 + i * 0.05));
       fart({ dur: 0.35, f0: 120, f1: 70, vol: 0.4, flutter: 24, cutoff: 1000 }, 0.4);
+      break;
+    case "banana":
+      noiseBurst(0.1, 0.18, 900, 0, 400); // chomp
+      [659, 523, 440].forEach((f, i) => tone(f, 0.12, 0.18, "triangle", 0.08 + i * 0.06));
+      break;
+    case "rumble":
+      // A low stomach growl: slow flutter, heavily lowpassed.
+      fart({ dur: 0.7 * intensity + 0.3, f0: rand(55, 70), f1: rand(40, 50), vol: 0.35 * intensity, flutter: rand(7, 10), cutoff: 320, noise: 0.5 });
+      break;
+    case "accident":
+      fart({ dur: 1.1, f0: 120, f1: 35, vol: 0.6, flutter: 9, cutoff: 700, noise: 0.6 });
+      tone(400, 0.7, 0.2, "square", 0.3, 80);
       break;
     case "shield":
       tone(1200, 0.25, 0.25, "sine", 0, 300);

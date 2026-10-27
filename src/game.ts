@@ -14,6 +14,7 @@ import { isMuted, setFlying, sfx, toggleMute } from "./audio";
 import {
   INK,
   MARKER_FONT,
+  drawBanana,
   drawBean,
   drawButton,
   drawCheckpoint,
@@ -96,6 +97,22 @@ const DEPLETED_ATTACK_RANGE_MULT = 0.4;
 const FARTING_LOW = 22; // below this the meter blinks and the flight jet sputters
 const BEAN_FARTING = 5; // each bean tops up this much
 const BEAN_COMBO_SEC = 0.7; // beans grabbed within this of each other raise the blip's pitch
+
+// Holding Power: how much longer the hero can hold it in. It drains on its
+// own — faster the closer the player has got to the toilet — and anything
+// that refuels Farting Power (beans, bean soup) drains it further, while
+// bananas (constipating) top it back up at the cost of a little gas.
+// Running out is an "accident": it costs a life like any other death.
+const HOLDING_MAX = 100;
+const HOLDING_DRAIN_PER_SEC = 1.1; // at the start of the level
+const HOLDING_PROGRESS_EXTRA = 1.5; // drain multiplier ramps up to 1 + this at the toilet
+const HOLDING_BEAN_COST = 1;
+const HOLDING_BEANSOUP_COST = 15;
+const HOLDING_BANANA = 20;
+const BANANA_FARTING_COST = 10;
+const HOLDING_LOW = 25; // below this the stomach rumbles, the screen shakes and the hero trembles
+const HOLDING_RESPAWN_MIN = 40; // a respawn never leaves you closer to an accident than this
+const RUMBLE_WORDS = ["grrrumble…", "hnngh!", "gotta go!", "*clench*", "not now…"];
 
 const ATTACK_RANGE = 40; // px, in front of the player
 const ATTACK_COOLDOWN_SEC = 0.45;
@@ -191,6 +208,12 @@ export class Game {
   private powerupFlash = 0;
   private elapsed = 0;
   private fartingPower = FARTING_MAX;
+  private holdingPower = HOLDING_MAX;
+  private holdingAtCheckpoint = HOLDING_MAX;
+  // Furthest the player's centre has got toward the toilet this life;
+  // drives the holding drain, so backtracking doesn't buy time.
+  private furthestX = 0;
+  private rumbleTimer = 0;
   private attackCooldown = 0;
   private attackFlash = 0;
 
@@ -211,7 +234,7 @@ export class Game {
 
   // Run bookkeeping
   private respawnPoint = { x: 0, y: 0 };
-  private dyingFromFall = false;
+  private dyingCause: "hit" | "fall" | "accident" = "hit";
   private runTime = 0;
   private deaths = 0;
   private enemiesFarted = 0;
@@ -250,6 +273,7 @@ export class Game {
     this.activePowers.clear();
     for (const p of this.level.powerUps) p.collected = false;
     for (const b of this.level.beans) b.collected = false;
+    for (const b of this.level.bananas) b.collected = false;
     for (const c of this.level.checkpoints) c.reached = false;
     this.checkpointRaise = this.level.checkpoints.map(() => 0);
     for (const e of this.level.enemies) {
@@ -260,6 +284,9 @@ export class Game {
     this.deadEnemies = [];
     this.particles = [];
     this.fartingPower = FARTING_MAX;
+    this.holdingPower = HOLDING_MAX;
+    this.holdingAtCheckpoint = HOLDING_MAX;
+    this.rumbleTimer = 0;
     this.attackCooldown = 0;
     this.attackFlash = 0;
     this.runTime = 0;
@@ -293,6 +320,7 @@ export class Game {
     this.squashX = 1;
     this.squashY = 1;
     this.camLead = 0;
+    this.furthestX = this.player.x + this.player.w / 2;
     this.cameraX = this.clampCamera(this.player.x + this.player.w / 2 - VIEW_W / 2);
   }
 
@@ -382,6 +410,8 @@ export class Game {
     // bring Farting Power to exactly 0 and hold it there, instead of this
     // frame's regen immediately topping it back up past a depleted check.
     this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
+
+    this.holdingPower = Math.max(0, this.holdingPower - HOLDING_DRAIN_PER_SEC * this.holdingDrainMult() * dt);
 
     const depleted = this.fartingPower <= 0;
     const p = this.player;
@@ -590,11 +620,19 @@ export class Game {
       this.beginWin();
     }
 
-    if (this.status === "playing" && p.y > this.level.heightPx + 80) {
-      this.die(true);
+    // Checked after pickups and the goal, so a last-second banana or
+    // reaching the toilet on the same frame still saves you.
+    if (this.status === "playing" && this.holdingPower <= 0) {
+      this.die("accident");
     }
 
+    if (this.status === "playing" && p.y > this.level.heightPx + 80) {
+      this.die("fall");
+    }
+
+    this.furthestX = Math.max(this.furthestX, p.x + p.w / 2);
     this.updateIdle(dt);
+    this.updateRumble(dt);
     this.updateSquash(dt);
 
     const lead = p.facing * CAM_LOOKAHEAD;
@@ -683,6 +721,8 @@ export class Game {
       this.floatText(cx, cy - 28, pickupLabel(powerUp.kind), pickupColor(powerUp.kind), 24);
       if (powerUp.kind === "beansoup") {
         this.fartingPower = FARTING_MAX;
+        this.holdingPower = Math.max(0, this.holdingPower - HOLDING_BEANSOUP_COST);
+        this.floatText(cx, cy - 4, "…uh oh", "#8a5a2b", 20);
         sfx("beansoup");
       } else {
         this.activePowers.set(powerUp.kind, {
@@ -702,15 +742,31 @@ export class Game {
       bean.collected = true;
       this.beansCollected++;
       this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + BEAN_FARTING);
+      this.holdingPower = Math.max(0, this.holdingPower - HOLDING_BEAN_COST);
       this.beanCombo++;
       this.beanComboTimer = BEAN_COMBO_SEC;
       this.burst("spark", bean.x + bean.w / 2, bean.y + bean.h / 2, 5, 120, "#b5552a");
       sfx("bean", 1, 1 + Math.min(this.beanCombo - 1, 8) * 0.07);
     }
 
+    for (const banana of this.level.bananas) {
+      if (banana.collected || !intersects(grab, banana)) continue;
+      banana.collected = true;
+      this.holdingPower = Math.min(HOLDING_MAX, this.holdingPower + HOLDING_BANANA);
+      this.fartingPower = Math.max(0, this.fartingPower - BANANA_FARTING_COST);
+      this.rumbleTimer = 0;
+      const cx = banana.x + banana.w / 2;
+      const cy = banana.y + banana.h / 2;
+      this.burst("spark", cx, cy, 12, 200, "#e0b800");
+      this.ripple(cx, cy, 28, "#e0b800");
+      this.floatText(cx, cy - 28, "BANANA! HOLD IT!", "#b08a00", 24);
+      sfx("banana");
+    }
+
     this.level.checkpoints.forEach((cp, i) => {
       if (cp.reached || !intersects(p, cp)) return;
       cp.reached = true;
+      this.holdingAtCheckpoint = this.holdingPower;
       this.respawnPoint = { x: cp.x, y: cp.y + cp.h - p.h };
       this.floatText(cp.x + 10, cp.y - 24, "CHECKPOINT!", "#4b8a2e", 24);
       this.burst("spark", cp.x + 10, cp.y + 10, 12, 180, "#7cc35a");
@@ -736,6 +792,40 @@ export class Game {
       if (Math.random() < 0.4) this.floatText(b.x - p.facing * 10, b.y - 6, "pff", "#7a7a86", 16);
       sfx("idle");
     }
+  }
+
+  // 1 at the start, ramping up (eased in, so the last stretch is the
+  // frantic part) to 1 + HOLDING_PROGRESS_EXTRA at the toilet.
+  private holdingDrainMult(): number {
+    const start = this.level.playerStart.x;
+    const end = this.level.goal.x;
+    const progress = Math.max(0, Math.min(1, (this.furthestX - start) / (end - start)));
+    return 1 + HOLDING_PROGRESS_EXTRA * progress * progress;
+  }
+
+  // 0 while Holding Power is comfortable, rising to 1 as it runs out.
+  private holdingUrgency(): number {
+    return Math.max(0, Math.min(1, 1 - this.holdingPower / HOLDING_LOW));
+  }
+
+  // Stomach growls, screen shakes and a clench, more often as it gets worse.
+  private updateRumble(dt: number): void {
+    if (this.holdingPower >= HOLDING_LOW) {
+      this.rumbleTimer = 0;
+      return;
+    }
+    this.rumbleTimer -= dt;
+    if (this.rumbleTimer > 0) return;
+    const u = this.holdingUrgency();
+    this.rumbleTimer = 2.4 - 1.5 * u;
+    this.shake = Math.max(this.shake, 2 + 3 * u);
+    this.squashX = 0.9;
+    this.squashY = 1.08;
+    const p = this.player;
+    if (Math.random() < 0.6) {
+      this.floatText(p.x + p.w / 2, p.y - 18, RUMBLE_WORDS[Math.floor(Math.random() * RUMBLE_WORDS.length)], "#8a5a2b", 20);
+    }
+    sfx("rumble", 0.6 + 0.4 * u);
   }
 
   private updateSquash(dt: number): void {
@@ -768,7 +858,7 @@ export class Game {
       sfx("shield");
       return;
     }
-    this.die(false);
+    this.die("hit");
   }
 
   private performAttack(depleted: boolean, dir: 1 | -1): void {
@@ -828,15 +918,27 @@ export class Game {
     }
   }
 
-  private die(fell: boolean): void {
+  private die(cause: "hit" | "fall" | "accident"): void {
     const p = this.player;
     this.lives -= 1;
     this.deaths += 1;
-    this.dyingFromFall = fell;
+    this.dyingCause = cause;
     this.activePowers.clear();
-    this.hitStop = fell ? 0 : 0.12;
-    this.shake = Math.max(this.shake, fell ? 4 : 9);
-    if (!fell) {
+    this.isHoldFlying = false;
+    this.hitStop = cause === "hit" ? 0.12 : 0;
+    this.shake = Math.max(this.shake, cause === "fall" ? 4 : cause === "accident" ? 7 : 9);
+    if (cause === "accident") {
+      // No tumble: the hero just freezes on the spot while it happens.
+      p.vx = 0;
+      p.vy = 0;
+      const b = this.buttPos();
+      this.fartBurst(b.x, b.y, -p.facing, 0.4, 16, 140, 6, 13, "#a9824f");
+      this.floatText(p.x + p.w / 2, p.y - 20, "OH NO…", "#8a5a2b", 30);
+      sfx("accident");
+      this.setStatus("dying");
+      return;
+    }
+    if (cause === "hit") {
       // Classic death hop: pop up, then tumble off the bottom of the screen.
       p.vy = -620;
       p.vx = -p.facing * 120;
@@ -850,7 +952,7 @@ export class Game {
 
   private updateDying(dt: number): void {
     const p = this.player;
-    if (!this.dyingFromFall) {
+    if (this.dyingCause === "hit") {
       p.vy += GRAVITY * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -865,6 +967,8 @@ export class Game {
     // beatable; beans, enemies and checkpoints keep their progress.
     for (const pu of this.level.powerUps) pu.collected = false;
     this.fartingPower = FARTING_MAX;
+    this.holdingPower = Math.max(HOLDING_RESPAWN_MIN, this.holdingAtCheckpoint);
+    this.rumbleTimer = 0;
     this.spawnPlayer();
     this.invuln = INVULN_SEC;
     this.groundedLastFrame = false;
@@ -1120,6 +1224,23 @@ export class Game {
       drawBean(ctx, bean.x + bean.w / 2, bean.y + bean.h / 2 + bob, bean.w * 0.45, Math.sin(this.elapsed * 2 + bean.x) * 0.3);
     }
 
+    level.bananas.forEach((banana, i) => {
+      if (banana.collected) return;
+      const bcx = banana.x + banana.w / 2;
+      const bcy = banana.y + banana.h / 2 + Math.sin(this.elapsed * 2.2 + i * 1.3) * 3;
+      ctx.save();
+      ctx.strokeStyle = "#e0b800";
+      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 5]);
+      ctx.lineDashOffset = -this.elapsed * 12;
+      ctx.beginPath();
+      ctx.arc(bcx, bcy, banana.w * 0.78, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      drawBanana(ctx, bcx, bcy, banana.w * 0.6, Math.sin(this.elapsed * 1.8 + i) * 0.2, 450 + i * 5);
+    });
+
     level.powerUps.forEach((powerUp, i) => {
       if (powerUp.collected) return;
       const pcx = powerUp.x + powerUp.w / 2;
@@ -1170,7 +1291,15 @@ export class Game {
         this.renderWinCard();
         break;
       case "gameover":
-        this.renderCard("Out of gas!", ["You ran out of lives.", "", this.isTouch ? "Tap to try again" : "Click to try again"], 0.02);
+        this.renderCard(
+          this.dyingCause === "accident" ? "Too late!" : "Out of gas!",
+          [
+            this.dyingCause === "accident" ? "You couldn't hold it in." : "You ran out of lives.",
+            "",
+            this.isTouch ? "Tap to try again" : "Click to try again",
+          ],
+          0.02,
+        );
         break;
     }
 
@@ -1238,7 +1367,7 @@ export class Game {
   }
 
   private currentSpriteName(): SpriteName {
-    if (this.status === "dying") return "jump4";
+    if (this.status === "dying") return this.dyingCause === "accident" ? "standing" : "jump4";
     if (this.status === "winning" || this.status === "won") return "powerup";
     if (this.attackFlash > 0) return "attack";
     if (this.powerupFlash > 0) return "powerup";
@@ -1265,7 +1394,7 @@ export class Game {
 
   private renderPlayer(): void {
     const { ctx, player: p } = this;
-    if (this.status === "dying" && this.dyingFromFall) return;
+    if (this.status === "dying" && this.dyingCause === "fall") return;
     // Blink while invulnerable.
     if (this.invuln > 0 && Math.floor(this.invuln / 0.08) % 2 === 0) return;
 
@@ -1324,20 +1453,28 @@ export class Game {
     let sqX = this.squashX;
     let sqY = this.squashY;
     if (name === "standing") sqY *= 1 + Math.sin(this.elapsed * 3) * 0.015; // breathing
+    // Trembling while desperately holding it in (and frozen mid-accident).
+    const accident = this.status === "dying" && this.dyingCause === "accident";
+    const tremble = accident ? 1 : this.status === "playing" ? this.holdingUrgency() : 0;
+    const trembleX = Math.sin(this.elapsed * 55) * 1.6 * tremble;
+    if (accident) {
+      sqX *= 1.06;
+      sqY *= 0.92;
+    }
 
     let tilt = 0;
     if (name === "hop1" || name === "hop2") tilt = Math.max(-0.3, Math.min(0.3, p.vx / 1100));
     else if (name === "flying") tilt = Math.max(-0.2, Math.min(0.2, p.vx / 1500));
 
     ctx.save();
-    if (this.status === "dying") {
+    if (this.status === "dying" && this.dyingCause === "hit") {
       // Tumble around the sprite's middle.
       ctx.translate(cx, bottom - h / 2);
       ctx.rotate(this.stateTime * 10 * -p.facing);
       ctx.scale(p.facing, 1);
       ctx.drawImage(img, -w / 2, -h / 2, w, h);
     } else {
-      ctx.translate(cx, bottom);
+      ctx.translate(cx + trembleX, bottom);
       ctx.rotate(tilt);
       ctx.scale(sqX * p.facing, sqY);
       ctx.drawImage(img, -w / 2, -h, w, h);
@@ -1375,11 +1512,11 @@ export class Game {
     // A torn paper strip behind the HUD so it reads over busy scenery.
     ctx.save();
     ctx.fillStyle = "rgba(251, 247, 234, 0.82)";
-    ctx.fillRect(6, 8, 560, 46);
+    ctx.fillRect(6, 8, 560, 76);
     ctx.strokeStyle = INK;
     ctx.globalAlpha = 0.5;
     ctx.lineWidth = 1.2;
-    sketchRect(ctx, { x: 6, y: 8, w: 560, h: 46 }, 1200, 1);
+    sketchRect(ctx, { x: 6, y: 8, w: 560, h: 76 }, 1200, 1);
     ctx.restore();
 
     for (let i = 0; i < MAX_LIVES; i++) {
@@ -1403,6 +1540,35 @@ export class Game {
     ctx.lineWidth = 1.8;
     sketchRect(ctx, bar, 1501, 1);
     ctx.restore();
+
+    // Holding Power meter, under the Farting Power one, with the toilet as
+    // its icon and the current drain rate when it's above the base rate.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(108, 50, 40, 32); // keep its stink lines out of the row above
+    ctx.clip();
+    drawToilet(ctx, { x: 117, y: 55, w: 22, h: 26 }, this.elapsed);
+    ctx.restore();
+    const hbar: Rect = { x: 150, y: 58, w: 170, h: 18 };
+    const hpct = this.holdingPower / HOLDING_MAX;
+    const hlow = this.holdingPower < HOLDING_LOW;
+    const hblinkOff = hlow && Math.floor(this.elapsed * (6 + 6 * this.holdingUrgency())) % 2 === 0;
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(hbar.x, hbar.y, hbar.w, hbar.h);
+    const hfill = { x: hbar.x, y: hbar.y, w: hbar.w * hpct, h: hbar.h };
+    ctx.fillStyle = hblinkOff ? "#f6c1c1" : hlow ? "#e5484d" : "#c08a4e";
+    ctx.fillRect(hfill.x, hfill.y, hfill.w, hfill.h);
+    hatch(ctx, hfill, 1510, INK, 6, 0.25);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.8;
+    sketchRect(ctx, hbar, 1511, 1);
+    ctx.restore();
+    const mult = this.holdingDrainMult();
+    handText(ctx, hlow ? "HOLD IT!" : "hold it", 330, 68, 20, hlow ? "#c62f2f" : "#4a4a5c", { align: "left" });
+    if (mult > 1.05) {
+      handText(ctx, `drain ×${mult.toFixed(1)}`, 420, 68, 20, mult > 2 ? "#c62f2f" : "#8a5a2b", { align: "left" });
+    }
 
     // Beans.
     drawBean(ctx, 348, 31, 8, -0.3);
@@ -1471,13 +1637,14 @@ export class Game {
   private renderWinCard(): void {
     const ctx = this.ctx;
     ctx.save();
-    const r = this.drawCardFrame(480, 330, -0.015);
+    const r = this.drawCardFrame(480, 364, -0.015);
     handText(ctx, "Flushed it!", VIEW_W / 2, r.y + 52, 46, "#3b8fc4", { font: MARKER_FONT });
     const rows: [string, string][] = [
       ["Time", formatTime(this.runTime)],
       ["Beans", `${this.beansCollected} / ${this.level.beans.length}`],
       ["Enemies farted", String(this.enemiesFarted)],
       ["Lives lost", String(this.deaths)],
+      ["Held it in with", `${Math.ceil(this.holdingPower)}% to spare`],
     ];
     rows.forEach(([k, v], i) => {
       const y = r.y + 112 + i * 34;
@@ -1490,12 +1657,12 @@ export class Game {
       ctx.globalAlpha = 1;
     });
     const best = this.bestTime !== null ? formatTime(this.bestTime) : "—";
-    handText(ctx, this.newBest ? "NEW BEST TIME!" : `Best time: ${best}`, VIEW_W / 2, r.y + 262, 24, this.newBest ? "#c62f2f" : "#4a4a5c", {
+    handText(ctx, this.newBest ? "NEW BEST TIME!" : `Best time: ${best}`, VIEW_W / 2, r.y + 296, 24, this.newBest ? "#c62f2f" : "#4a4a5c", {
       font: this.newBest ? MARKER_FONT : undefined,
       angle: this.newBest ? -0.04 : 0,
     });
     if (Math.floor(this.elapsed * 2) % 2 === 0 || this.stateTime < 0.8) {
-      handText(ctx, this.isTouch ? "Tap to play again" : "Click to play again", VIEW_W / 2, r.y + 300, 24);
+      handText(ctx, this.isTouch ? "Tap to play again" : "Click to play again", VIEW_W / 2, r.y + 334, 24);
     }
     ctx.restore();
   }
@@ -1544,7 +1711,8 @@ export class Game {
       handText(ctx, k, card.x + 150, y, 25, "#3b5bd6", { align: "right" });
       handText(ctx, "→ " + v, card.x + 165, y, 25, INK, { align: "left" });
     });
-    handText(ctx, "Eat beans to refuel. Get to the toilet!", card.x + card.w / 2, card.y + 220, 22, "#4a4a5c");
+    handText(ctx, "Beans refuel you, but make you need to go sooner.", card.x + card.w / 2, card.y + 206, 21, "#4a4a5c");
+    handText(ctx, "Bananas help you hold it. Get to the toilet!", card.x + card.w / 2, card.y + 230, 21, "#4a4a5c");
 
     if (Math.floor(this.elapsed * 2) % 2 === 0) {
       handText(ctx, t ? "Tap anywhere to start" : "Click anywhere to start", VIEW_W / 2, 476, 30, "#c62f2f", { font: MARKER_FONT });
