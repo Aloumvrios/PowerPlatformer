@@ -133,9 +133,11 @@ export async function calibrateDrain(
   // Pattern search: step either way, halve the step when neither helps.
   let step = 0.08;
   for (let i = 0; i < 8 && best.l > 0 && step > 0.01; i++) {
-    const up = await score(best.t.holdingDrainPerSec * (1 + step));
-    const down = await score(best.t.holdingDrainPerSec * (1 - step));
-    const better = [up, down].filter((c) => c.l < best.l).sort((a, b) => a.l - b.l)[0];
+    const cur = best.t.holdingDrainPerSec;
+    const tries = [cur * (1 + step), cur * (1 - step)].filter((d) => clampParam("holdingDrainPerSec", d) !== cur);
+    const scored = [];
+    for (const d of tries) scored.push(await score(d));
+    const better = scored.filter((c) => c.l < best.l).sort((a, b) => a.l - b.l)[0];
     if (better) best = better;
     else step /= 2;
   }
