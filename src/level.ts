@@ -1,4 +1,4 @@
-import type { Banana, Bean, Level } from "./types";
+import type { Banana, Bean, Level, Stage } from "./types";
 
 const BEAN_SIZE = 16;
 
@@ -107,3 +107,8 @@ export const level1: Level = {
 
   goal: { x: 2288, y: 380, w: 46, h: 60 },
 };
+
+// Every stage, in play order. Adding one here is all the game needs; its
+// Easy/Medium/Hard values come from `npm run sim -- tune` (until then it
+// plays with DEFAULT_TUNING, and the difficulty check fails as "untuned").
+export const STAGES: Stage[] = [{ id: "stage1", name: "Stage 1", level: level1 }];

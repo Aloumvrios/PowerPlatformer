@@ -5,7 +5,7 @@
 // and import.meta.glob resolve), then runs simulated sessions on a pool of
 // worker threads, one per CPU core.
 import { build } from "vite";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -24,8 +24,8 @@ globalThis.Image ??= class {
 
 if (!isMainThread) {
   const sim = await import(workerData.bundle);
-  parentPort.on("message", ({ id, tuning, sessions, seed, personas, from, to }) => {
-    parentPort.postMessage({ id, results: sim.runSlice(tuning, sessions, seed, personas, from, to) });
+  parentPort.on("message", ({ id, tuning, stageId, sessions, seed, personas, from, to }) => {
+    parentPort.postMessage({ id, results: sim.runSlice(tuning, stageId, sessions, seed, personas, from, to) });
   });
 } else {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -62,21 +62,25 @@ if (!isMainThread) {
     });
 
   // Same results as running every session in order on one thread.
-  const runPopulation = async (tuning, sessions, seed, personas) => {
+  const runPopulation = async (tuning, stageId, sessions, seed, personas) => {
     const chunk = Math.ceil(sessions / workers.length);
     const parts = await Promise.all(
       workers.map((w, i) => {
         const from = i * chunk;
         const to = Math.min(sessions, from + chunk);
-        return from < to ? call(w, { tuning, sessions, seed, personas, from, to }) : Promise.resolve([]);
+        return from < to ? call(w, { tuning, stageId, sessions, seed, personas, from, to }) : Promise.resolve([]);
       }),
     );
     return parts.flat();
   };
 
   try {
-    await sim.main(process.argv.slice(2), {
+    process.exitCode = await sim.main(process.argv.slice(2), {
       log: (msg) => process.stdout.write(msg + "\n"),
+      readFile: (path) => {
+        const full = resolve(root, path);
+        return existsSync(full) ? readFileSync(full, "utf8") : null;
+      },
       writeFile: (path, text) => {
         const full = resolve(root, path);
         mkdirSync(dirname(full), { recursive: true });

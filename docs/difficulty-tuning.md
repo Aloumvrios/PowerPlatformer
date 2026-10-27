@@ -1,13 +1,15 @@
 # Difficulty tuning
 
 - **generated:** 2026-10-27
-- **command:** npm run sim -- tune
-- **players per difficulty (validation):** 1000
+- **command:** npm run sim -- check --update-baseline --out sim-out/check.md
+- **players per stage and difficulty:** 1000
 - **pace:** 1
 
 A player *finishes* if they reach the toilet on their first attempt (one run, all lives). Final Holding Power is the median over those who finish. Simulated player base: speedrunner 10%, casual 35%, collector 20%, cautious 15%, newbie 20%.
 
-## Headline
+## Stage 1 (`stage1`)
+
+### Headline
 
 | | easy | medium | hard |
 |---|---|---|---|
@@ -28,7 +30,7 @@ A player *finishes* if they reach the toilet on their first attempt (one run, al
 | Enemies farted (mean) | 0.07 | 0.07 | 0.07 |
 | Deaths: hit / fall / accident | 310 / 0 / 0 | 370 / 0 / 936 | 335 / 0 / 2207 |
 
-## Tuning values
+### Tuning values
 
 Bold = changed from the default.
 
@@ -49,7 +51,7 @@ Bold = changed from the default.
 | `holdingBanana` | 20 | 20 | 20 | **14** |
 | `holdingRespawnMin` | 40 | 40 | 40 | 40 |
 
-## easy: by persona
+### easy: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
@@ -61,7 +63,7 @@ Bold = changed from the default.
 
 Where first-attempt deaths happen (level x): 1200-1400: 118, 1400-1600: 89, 1600-1800: 63, 2000-2200: 40
 
-## medium: by persona
+### medium: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
@@ -73,7 +75,7 @@ Where first-attempt deaths happen (level x): 1200-1400: 118, 1400-1600: 89, 1600
 
 Where first-attempt deaths happen (level x): 200-400: 1, 400-600: 2, 600-800: 6, 800-1000: 9, 1000-1200: 42, 1200-1400: 224, 1400-1600: 179, 1600-1800: 137, 1800-2000: 104, 2000-2200: 211, 2200-2400: 391
 
-## hard: by persona
+### hard: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
@@ -84,3 +86,4 @@ Where first-attempt deaths happen (level x): 200-400: 1, 400-600: 2, 600-800: 6,
 | newbie | 1% | 11.2 | 24.1 | 2.98 | 1.46 | 8.1 | 73/0/523 |
 
 Where first-attempt deaths happen (level x): 0-200: 2, 200-400: 5, 400-600: 5, 600-800: 21, 800-1000: 39, 1000-1200: 115, 1200-1400: 377, 1400-1600: 390, 1600-1800: 456, 1800-2000: 464, 2000-2200: 418, 2200-2400: 250
+

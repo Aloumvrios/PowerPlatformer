@@ -1,5 +1,5 @@
 import { getPressIndicator, pointerInput, setUiButtons, type InputSource, type UiButton } from "./input";
-import { level1 } from "./level";
+import { STAGES } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import { isMuted, setFlying, sfx, toggleMute } from "./audio";
 import {
@@ -30,7 +30,7 @@ import {
   type ButtonIcon,
 } from "./doodle";
 import type { ActivePower, Enemy, Level, PowerKind, Rect } from "./types";
-import { DEFAULT_TUNING, DIFFICULTIES, PRESETS, type Difficulty, type Tuning } from "./tuning";
+import { DEFAULT_TUNING, DIFFICULTIES, presetFor, type Difficulty, type Tuning } from "./tuning";
 import { VIEW_H, VIEW_W } from "./view";
 
 export const GRAVITY = 1800; // px/s^2
@@ -110,7 +110,7 @@ export const INPUT_GRACE_SEC = 0.3;
 
 const CAM_LOOKAHEAD = 90; // px the camera leads in the facing direction
 const MAX_PARTICLES = 450;
-const BEST_TIME_KEY = "powerplatformer.bestTime"; // + "." + difficulty
+const BEST_TIME_KEY = "powerplatformer.bestTime"; // + "." + stage id + "." + difficulty
 const DIFFICULTY_KEY = "powerplatformer.difficulty";
 
 interface Player extends Rect {
@@ -152,9 +152,9 @@ function formatTime(sec: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s.toFixed(1)}`;
 }
 
-function readBestTime(difficulty: Difficulty): number | null {
+function readBestTime(stageId: string, difficulty: Difficulty): number | null {
   try {
-    const v = Number(localStorage.getItem(`${BEST_TIME_KEY}.${difficulty}`));
+    const v = Number(localStorage.getItem(`${BEST_TIME_KEY}.${stageId}.${difficulty}`));
     return v > 0 ? v : null;
   } catch {
     return null;
@@ -222,7 +222,8 @@ export class Game {
   private difficulty: Difficulty;
   private tuning: Tuning = DEFAULT_TUNING;
   private stats: RunStats = emptyStats();
-  private level: Level = level1;
+  private stageIndex = 0;
+  private level: Level = STAGES[0].level;
   private player!: Player;
   private cameraX = 0;
   private camLead = 0;
@@ -290,8 +291,8 @@ export class Game {
     this.input = opts.input ?? pointerInput;
     this.headless = !!opts.headless;
     this.difficulty = this.headless ? "medium" : readDifficulty();
-    this.tuning = PRESETS[this.difficulty];
-    this.bestTime = this.headless ? null : readBestTime(this.difficulty);
+    this.tuning = presetFor(STAGES[0].id, this.difficulty);
+    this.bestTime = this.headless ? null : readBestTime(STAGES[0].id, this.difficulty);
     this.isTouch = !this.headless && window.matchMedia("(pointer: coarse)").matches;
     this.canFullscreen = !this.headless && !!document.fullscreenEnabled;
     if (canvas) this.ctx = canvas.getContext("2d")!;
@@ -309,7 +310,8 @@ export class Game {
   // --- simulator API -------------------------------------------------------------
   // Read-only views and controls for the balancing simulator (src/sim/).
 
-  startRun(tuning: Tuning): void {
+  startRun(tuning: Tuning, stageId: string): void {
+    this.setStage(STAGES.findIndex((s) => s.id === stageId));
     this.tuning = tuning;
     this.resetRun();
   }
@@ -479,6 +481,9 @@ export class Game {
       case "gameover":
         if (this.input.consumeAnyAction() && this.stateTime > 0.8) {
           sfx("ui");
+          // Winning moves on to the next stage (back to the first after the
+          // last); a game over replays the same one.
+          if (this.status === "won") this.setStage((this.stageIndex + 1) % STAGES.length);
           this.resetRun();
         }
         break;
@@ -1110,7 +1115,7 @@ export class Game {
       this.bestTime = this.runTime;
       this.newBest = true;
       try {
-        localStorage.setItem(`${BEST_TIME_KEY}.${this.difficulty}`, String(this.runTime));
+        localStorage.setItem(`${BEST_TIME_KEY}.${STAGES[this.stageIndex].id}.${this.difficulty}`, String(this.runTime));
       } catch {
         // not saved, still shown this session
       }
@@ -1326,10 +1331,18 @@ export class Game {
 
   private buttons: HudButton[] = [];
 
+  private setStage(i: number): void {
+    if (i < 0) throw new Error("unknown stage");
+    this.stageIndex = i;
+    this.level = STAGES[i].level;
+    this.tuning = presetFor(STAGES[i].id, this.difficulty);
+    this.bestTime = this.headless ? null : readBestTime(STAGES[i].id, this.difficulty);
+  }
+
   private setDifficulty(d: Difficulty): void {
     this.difficulty = d;
-    this.tuning = PRESETS[d];
-    this.bestTime = readBestTime(d);
+    this.tuning = presetFor(STAGES[this.stageIndex].id, d);
+    this.bestTime = readBestTime(STAGES[this.stageIndex].id, d);
     try {
       localStorage.setItem(DIFFICULTY_KEY, d);
     } catch {
@@ -1438,7 +1451,7 @@ export class Game {
         this.renderTitle();
         break;
       case "paused":
-        this.renderCard("Paused", [`${DIFFICULTY_LABEL[this.difficulty]} mode`, "Tap anywhere to keep going"], 0);
+        this.renderCard("Paused", [`${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode`, "Tap anywhere to keep going"], 0);
         break;
       case "won":
         this.renderWinCard();
@@ -1448,7 +1461,7 @@ export class Game {
           this.dyingCause === "accident" ? "Too late!" : "Out of gas!",
           [
             this.dyingCause === "accident" ? "You couldn't hold it in." : "You ran out of lives.",
-            `(${DIFFICULTY_LABEL[this.difficulty]} mode)`,
+            `(${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode)`,
             this.isTouch ? "Tap to try again" : "Click to try again",
           ],
           0.02,
@@ -1796,7 +1809,7 @@ export class Game {
     const r = this.drawCardFrame(480, 398, -0.015);
     handText(ctx, "Flushed it!", VIEW_W / 2, r.y + 52, 46, "#3b8fc4", { font: MARKER_FONT });
     const rows: [string, string][] = [
-      ["Difficulty", DIFFICULTY_LABEL[this.difficulty]],
+      ["Stage", `${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]}`],
       ["Time", formatTime(this.runTime)],
       ["Beans", `${this.beansCollected} / ${this.level.beans.length}`],
       ["Enemies farted", String(this.enemiesFarted)],
@@ -1819,7 +1832,9 @@ export class Game {
       angle: this.newBest ? -0.04 : 0,
     });
     if (Math.floor(this.elapsed * 2) % 2 === 0 || this.stateTime < 0.8) {
-      handText(ctx, this.isTouch ? "Tap to play again" : "Click to play again", VIEW_W / 2, r.y + 368, 24);
+      const next = this.stageIndex + 1 < STAGES.length ? STAGES[this.stageIndex + 1].name : null;
+      const verb = this.isTouch ? "Tap" : "Click";
+      handText(ctx, next ? `${verb} for ${next}` : `${verb} to play again`, VIEW_W / 2, r.y + 368, 24);
     }
     ctx.restore();
   }

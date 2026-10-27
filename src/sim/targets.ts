@@ -2,6 +2,8 @@
 // base (first attempt = one run with all lives):
 //   - finishRate: share of players who reach the toilet
 //   - holding: median final Holding Power among those who do
+// The difficulty check (`npm run sim -- check`, run on every PR) fails if
+// any stage's preset falls outside these bands.
 import type { Difficulty, Tuning } from "../tuning";
 
 export interface Band {
@@ -19,6 +21,18 @@ export const TARGETS: Record<Difficulty, Target> = {
   medium: { holding: { min: 30, max: 40 }, finishRate: { min: 0.5, max: 0.7 } },
   hard: { holding: { min: 5, max: 10 }, finishRate: { min: 0.2, max: 0.4 } },
 };
+
+// Per-stage exceptions to TARGETS, e.g. a deliberately tough final stage:
+//   stage3: { hard: { holding: { min: 0, max: 8 }, finishRate: { min: 0.1, max: 0.3 } } },
+export const STAGE_TARGETS: Record<string, Partial<Record<Difficulty, Target>>> = {};
+
+export function targetFor(stageId: string, d: Difficulty): Target {
+  return STAGE_TARGETS[stageId]?.[d] ?? TARGETS[d];
+}
+
+export function inBand(v: number | null, b: Band): boolean {
+  return v !== null && v >= b.min && v <= b.max;
+}
 
 // The search space: which Tuning values the tuner may change, and within
 // what range. Anything not listed keeps its starting value.

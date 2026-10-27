@@ -1,19 +1,21 @@
 {
-  "easy": {
-    "fartingJumpCost": 10.39,
-    "holdingDrainPerSec": 0.7
-  },
-  "medium": {
-    "fartingJumpCost": 10.39,
-    "holdingDrainPerSec": 4.84
-  },
-  "hard": {
-    "fartingJumpCost": 8.78,
-    "fartingFlyCostPerSec": 15.9,
-    "beanFarting": 7.59,
-    "holdingDrainPerSec": 6,
-    "holdingProgressExtra": 3,
-    "holdingBeanCost": 0.88,
-    "holdingBanana": 14
+  "stage1": {
+    "easy": {
+      "fartingJumpCost": 10.39,
+      "holdingDrainPerSec": 0.7
+    },
+    "medium": {
+      "fartingJumpCost": 10.39,
+      "holdingDrainPerSec": 4.84
+    },
+    "hard": {
+      "fartingJumpCost": 8.78,
+      "fartingFlyCostPerSec": 15.9,
+      "beanFarting": 7.59,
+      "holdingDrainPerSec": 6,
+      "holdingProgressExtra": 3,
+      "holdingBeanCost": 0.88,
+      "holdingBanana": 14
+    }
   }
 }

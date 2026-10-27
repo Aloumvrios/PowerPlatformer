@@ -34,7 +34,7 @@ export interface SessionResult {
   attempts: AttemptResult[];
 }
 
-export function runSession(tuning: Tuning, persona: Persona, seed: number): SessionResult {
+export function runSession(tuning: Tuning, stageId: string, persona: Persona, seed: number): SessionResult {
   const rng = new Rng(seed);
   let agent: Agent;
   const game = new Game(null, {
@@ -51,7 +51,7 @@ export function runSession(tuning: Tuning, persona: Persona, seed: number): Sess
 
   const attempts: AttemptResult[] = [];
   for (let a = 0; a < MAX_ATTEMPTS; a++) {
-    game.startRun(tuning);
+    game.startRun(tuning, stageId);
     agent.reset();
     let simTime = 0;
     while (simTime < RUN_CAP_SEC) {
@@ -89,17 +89,34 @@ export function runSession(tuning: Tuning, persona: Persona, seed: number): Sess
 
 // Sessions [from, to) of a population of `sessions` players. Split so a
 // population can be spread across worker threads (see scripts/sim.mjs).
-export function runSlice(tuning: Tuning, sessions: number, seed: number, personas: Persona[], from: number, to: number): SessionResult[] {
+export function runSlice(
+  tuning: Tuning,
+  stageId: string,
+  sessions: number,
+  seed: number,
+  personas: Persona[],
+  from: number,
+  to: number,
+): SessionResult[] {
   const out: SessionResult[] = [];
-  for (let i = from; i < to; i++) out.push(runSession(tuning, personaFor(i, sessions, personas), seed * 100003 + i));
+  for (let i = from; i < to; i++) out.push(runSession(tuning, stageId, personaFor(i, sessions, personas), seed * 100003 + i));
   return out;
 }
 
-export function runPopulation(tuning: Tuning, sessions: number, seed: number, personas: Persona[] = PERSONAS): SessionResult[] {
-  return runSlice(tuning, sessions, seed, personas, 0, sessions);
+export function runPopulation(tuning: Tuning, stageId: string, sessions: number, seed: number, personas: Persona[] = PERSONAS): SessionResult[] {
+  return runSlice(tuning, stageId, sessions, seed, personas, 0, sessions);
 }
 
+// Runs a population on one stage (the tuner works one stage at a time).
 export type PopulationRunner = (tuning: Tuning, sessions: number, seed: number, personas: Persona[]) => Promise<SessionResult[]>;
+// The same, for any stage; scripts/sim.mjs spreads it across worker threads.
+export type StagePopulationRunner = (
+  tuning: Tuning,
+  stageId: string,
+  sessions: number,
+  seed: number,
+  personas: Persona[],
+) => Promise<SessionResult[]>;
 
 // --- aggregation ----------------------------------------------------------------
 

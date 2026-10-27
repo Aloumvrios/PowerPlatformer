@@ -16,7 +16,12 @@ const num = (v: number | null, d = 1) => (v === null ? "—" : v.toFixed(d));
 const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
 const inBand = (v: number | null, b: Band) => (v !== null && v >= b.min && v <= b.max ? "✅" : "❌");
 
-export function renderReport(title: string, entries: ReportEntry[], meta: Record<string, string | number>, personas: Persona[]): string {
+export interface ReportStage {
+  title: string;
+  entries: ReportEntry[];
+}
+
+export function renderReport(title: string, stages: ReportStage[], meta: Record<string, string | number>, personas: Persona[]): string {
   const out: string[] = [`# ${title}`, ""];
   out.push(Object.entries(meta).map(([k, v]) => `- **${k}:** ${v}`).join("\n"), "");
   out.push(
@@ -25,8 +30,13 @@ export function renderReport(title: string, entries: ReportEntry[], meta: Record
       `Simulated player base: ${personas.map((p) => `${p.name} ${Math.round(p.weight * 100)}%`).join(", ")}.`,
     "",
   );
+  for (const stage of stages) out.push(`## ${stage.title}`, "", ...renderStage(stage.entries));
+  return out.join("\n");
+}
 
-  out.push("## Headline", "");
+function renderStage(entries: ReportEntry[]): string[] {
+  const out: string[] = [];
+  out.push("### Headline", "");
   out.push("| | " + entries.map((e) => e.name).join(" | ") + " |");
   out.push("|---|" + entries.map(() => "---").join("|") + "|");
   const row = (label: string, f: (e: ReportEntry) => string) => out.push(`| ${label} | ${entries.map(f).join(" | ")} |`);
@@ -48,7 +58,7 @@ export function renderReport(title: string, entries: ReportEntry[], meta: Record
   row("Deaths: hit / fall / accident", (e) => `${e.summary.deathCauses.hit} / ${e.summary.deathCauses.fall} / ${e.summary.deathCauses.accident}`);
   out.push("");
 
-  out.push("## Tuning values", "", "Bold = changed from the default.", "");
+  out.push("### Tuning values", "", "Bold = changed from the default.", "");
   const tuned = entries.filter((e) => e.name !== "default");
   out.push("| | default | " + tuned.map((e) => e.name).join(" | ") + " |");
   out.push("|---|---|" + tuned.map(() => "---").join("|") + "|");
@@ -58,7 +68,7 @@ export function renderReport(title: string, entries: ReportEntry[], meta: Record
   out.push("");
 
   for (const e of entries) {
-    out.push(`## ${e.name}: by persona`, "");
+    out.push(`### ${e.name}: by persona`, "");
     out.push("| persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |");
     out.push("|---|---|---|---|---|---|---|---|");
     for (const [name, s] of Object.entries(e.byPersona)) {
@@ -70,5 +80,5 @@ export function renderReport(title: string, entries: ReportEntry[], meta: Record
     if (xs.length) out.push("", `Where first-attempt deaths happen (level x): ${xs.map(([k, v]) => `${k}: ${v}`).join(", ")}`);
     out.push("");
   }
-  return out.join("\n");
+  return out;
 }

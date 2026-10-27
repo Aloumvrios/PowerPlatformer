@@ -73,3 +73,11 @@ export interface ActivePower {
   kind: PowerKind;
   remainingSec: number;
 }
+
+// A playable stage: an id that keys its difficulty presets and saved best
+// times (keep it stable once shipped), a display name, and its level.
+export interface Stage {
+  id: string;
+  name: string;
+  level: Level;
+}
