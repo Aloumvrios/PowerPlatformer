@@ -24,12 +24,9 @@ const WEAK_LAUNCH_ANIM_SEC = 0.3; // cosmetic only: hop1 vs hop2 split while air
 const SPEED_BOOST_MULT = 1.8;
 
 // Press and hold (don't release) to fly toward the pointer: full manual
-// velocity control, bypassing gravity for as long as it's held. Placeholder
-// pose for now (reuses the jump sequence's last frame) until real art
-// arrives for it.
+// velocity control, bypassing gravity for as long as it's held.
 const FLY_HOLD_SPEED = 300; // px/s
 const FLY_HOLD_MIN_DIST = 6; // px; closer than this, just hover in place
-const FARTING_FLY_HOLD_COST_PER_SEC = 14;
 
 const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 
@@ -48,6 +45,9 @@ const FARTING_REGEN_PER_SEC = 6;
 const FARTING_WEAK_LAUNCH_COST = 6;
 const FARTING_JUMP_COST = 12;
 const FARTING_ATTACK_COST = 18;
+// Flying is continuous, not a one-off action, so it's priced per second —
+// 2.5x a single tap's cost per second of hold.
+const FARTING_FLY_HOLD_COST_PER_SEC = FARTING_WEAK_LAUNCH_COST * 2.5;
 const DEPLETED_SPEED_MULT = 0.5;
 const DEPLETED_JUMP_MULT = 0.6;
 const DEPLETED_ATTACK_RANGE_MULT = 0.4;
@@ -86,6 +86,7 @@ export class Game {
   private jumpDirY = -1;
   private launchTier: "weak" | "strong" | null = null;
   private isHoldFlying = false;
+  private flightExhausted = false;
   private airTime = 0;
   private powerupFlash = 0;
   private elapsed = 0;
@@ -127,6 +128,7 @@ export class Game {
     this.jumpBuffer = 0;
     this.launchTier = null;
     this.isHoldFlying = false;
+    this.flightExhausted = false;
     this.spawnPlayer();
     this.status = "playing";
     this.overlay.classList.add("hidden");
@@ -175,12 +177,25 @@ export class Game {
       if (power.remainingSec <= 0) this.activePowers.delete(kind);
     }
 
+    // Regen first, action costs after — so a draining cost can actually
+    // bring Farting Power to exactly 0 and hold it there, instead of this
+    // frame's regen immediately topping it back up past a depleted check.
+    this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
+
     const depleted = this.fartingPower <= 0;
     const p = this.player;
     const poweredFly = this.hasPower("fly");
 
     const flyHoldTarget = getFlyTarget();
-    this.isHoldFlying = flyHoldTarget !== null;
+    if (flyHoldTarget === null) {
+      this.flightExhausted = false;
+    }
+    // Flying stops the instant Farting Power runs out — the player lands
+    // instead of just flying weaker, unlike every other soft-penalized
+    // action. Once exhausted mid-flight, it stays grounded even if still
+    // held; releasing and holding again is what re-engages it (otherwise
+    // regen would let it flicker back on a frame later).
+    this.isHoldFlying = flyHoldTarget !== null && !this.flightExhausted;
 
     if (this.isHoldFlying) {
       const screenX = p.x + p.w / 2 - this.cameraX;
@@ -188,7 +203,7 @@ export class Game {
       const dx = flyHoldTarget!.x - screenX;
       const dy = flyHoldTarget!.y - screenY;
       const dist = Math.hypot(dx, dy);
-      const speed = FLY_HOLD_SPEED * (depleted ? DEPLETED_SPEED_MULT : 1);
+      const speed = FLY_HOLD_SPEED;
       if (dist > FLY_HOLD_MIN_DIST) {
         p.vx = (dx / dist) * speed;
         p.vy = (dy / dist) * speed;
@@ -202,6 +217,9 @@ export class Game {
       this.jumpBuffer = 0;
       this.launchTier = null;
       this.fartingPower = Math.max(0, this.fartingPower - FARTING_FLY_HOLD_COST_PER_SEC * dt);
+      if (this.fartingPower <= 0) {
+        this.flightExhausted = true;
+      }
     } else {
       if (poweredFly) {
         p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
@@ -298,8 +316,6 @@ export class Game {
     if (consumeAttack() && this.attackCooldown <= 0) {
       this.performAttack(depleted);
     }
-
-    this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
 
     if (p.onGround) {
       this.airTime = 0;
@@ -495,10 +511,7 @@ export class Game {
   private currentSpriteName(): SpriteName {
     if (this.attackFlash > 0) return "attack";
     if (this.powerupFlash > 0) return "powerup";
-    if (this.isHoldFlying) {
-      // Placeholder pose until the real hold-to-fly art arrives.
-      return JUMP_SEQUENCE[JUMP_SEQUENCE.length - 1];
-    }
+    if (this.isHoldFlying) return "flying";
     if (this.launchTier === "weak" && !this.player.onGround) {
       return this.airTime < WEAK_LAUNCH_ANIM_SEC / 2 ? "hop1" : "hop2";
     }
@@ -544,7 +557,8 @@ export class Game {
     const img = sprites[name];
     if (!img.complete || img.naturalWidth === 0) return;
 
-    const targetH = name === "powerup" ? 112 : name === "attack" ? 84 : 74;
+    const targetH =
+      name === "powerup" ? 112 : name === "attack" || name === "flying" ? 90 : 74;
     const scale = targetH / img.naturalHeight;
     const w = img.naturalWidth * scale;
     const h = img.naturalHeight * scale;

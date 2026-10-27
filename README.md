@@ -11,7 +11,10 @@ Mouse and touch only — no keyboard:
   Aim up-and-over to arc across a gap, or steep to climb.
 - **Press and hold** (don't release) — fly toward the pointer with full
   manual control for as long as it's held; drag to steer. Costs Farting
-  Power continuously while held.
+  Power continuously while held — 2.5x a single click's cost every
+  second — and unlike every other action, this one isn't a soft
+  penalty: running out mid-flight forces a landing immediately, even
+  if you keep holding. Let go and hold again once it's recovered.
 - **Right-click / swipe right** — attack.
 - Click/tap anywhere to dismiss the death/win screen and restart.
 
@@ -26,9 +29,10 @@ Power-ups (collected by running into their glowing orb):
 - **Bean soup** (bowl icon) — instantly refills Farting Power
 
 **Farting Power** is a stamina meter (top HUD bar) that regenerates on its
-own and is spent by every action — moving, jumping, attacking. At zero it
-doesn't lock you out, but movement, jump height and attack range are all
-weaker until it recovers (or you grab bean soup).
+own and is spent by every action — moving, jumping, attacking, flying. At
+zero, launches and attacks don't lock you out, just get weaker until it
+recovers (or you grab bean soup) — flying is the one exception, since
+running out mid-air forces an immediate landing.
 
 **Attack** is a fart blast in front of the player (the direction they're
 facing) and defeats enemies caught in range; it's on a short cooldown.
