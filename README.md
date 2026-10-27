@@ -2,16 +2,22 @@
 
 A 2D browser platformer about chaining temporary power-ups through a level.
 
-**Keyboard**: Arrow keys / WASD to move, Up / W to jump, Space to attack, R to
-restart. **Touch**: hold the left/right half of the screen to move, double-tap
-to jump, swipe right to attack.
+Mouse and touch only — no keyboard:
+
+- **Click / tap** the left or right half of the screen — one fart-propelled
+  hop in that direction. Movement is discrete, not held: tap again for
+  another hop.
+- **Double-click / double-tap** — jump.
+- **Right-click / swipe right** — attack.
+- Click/tap anywhere to dismiss the death/win screen and restart.
 
 Power-ups (collected by running into their glowing orb):
 
-- **Speed** (yellow, 6s) — faster movement
+- **Speed** (yellow, 6s) — faster hops
 - **Jump** (blue, 6s) — higher jump
 - **Shield** (cyan, 6s) — absorbs one hazard hit
-- **Fly** (wing icon, 8s) — ignore gravity; Up/Down (or W/S) controls altitude
+- **Fly** (wing icon, 8s) — gravity is mostly cancelled (slow float-fall);
+  jump taps give an ascend flap instead of requiring solid ground
 - **Bean soup** (bowl icon) — instantly refills Farting Power
 
 **Farting Power** is a stamina meter (top HUD bar) that regenerates on its
@@ -19,8 +25,8 @@ own and is spent by every action — moving, jumping, attacking. At zero it
 doesn't lock you out, but movement, jump height and attack range are all
 weaker until it recovers (or you grab bean soup).
 
-**Attack** swings in front of the player (the direction they're facing) and
-defeats enemies caught in range; it's on a short cooldown.
+**Attack** is a fart blast in front of the player (the direction they're
+facing) and defeats enemies caught in range; it's on a short cooldown.
 
 Falling off the level, touching an enemy, or hitting a hazard without a
 shield costs a life; running out of lives ends the run.

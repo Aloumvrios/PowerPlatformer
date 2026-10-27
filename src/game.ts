@@ -1,18 +1,23 @@
-import { isDown, consume } from "./input";
+import { consumeHopDirection, consumeJump, consumeAttack, consumeAnyAction } from "./input";
 import { level1 } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import type { ActivePower, Enemy, Level, PickupKind, PowerKind, Rect } from "./types";
 
 const GRAVITY = 1800; // px/s^2
-const MOVE_SPEED = 280; // px/s
-const SPEED_BOOST_MULT = 1.8;
+const FLY_GRAVITY_MULT = 0.18; // slow float-fall while flying; ascend comes from jump taps
 const JUMP_VELOCITY = -620; // px/s
 const JUMP_BOOST_VELOCITY = -820; // px/s
-const FLY_SPEED_Y = 260; // px/s vertical control while flying
 const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 const MAX_LIVES = 3;
 const JUMP_ANIM_DURATION_SEC = 0.6;
 const POWERUP_FLASH_SEC = 0.45;
+
+// Movement is a discrete fart-propelled hop, not a held run: each tap/click
+// triggers one horizontal dash, with a small vertical pop for feel.
+const HOP_SPEED = 320; // px/s during the hop
+const HOP_DURATION = 0.28; // sec
+const HOP_VY_POP = -260; // px/s, small upward assist on hop start
+const SPEED_BOOST_MULT = 1.8;
 
 const POWER_DURATIONS: Record<PowerKind, number> = {
   speed: 6,
@@ -26,7 +31,7 @@ const POWER_DURATIONS: Record<PowerKind, number> = {
 // makes move/jump/attack weaker until it recovers (or bean soup refills it).
 const FARTING_MAX = 100;
 const FARTING_REGEN_PER_SEC = 6;
-const FARTING_MOVE_COST_PER_SEC = 8;
+const FARTING_HOP_COST = 6;
 const FARTING_JUMP_COST = 12;
 const FARTING_ATTACK_COST = 18;
 const DEPLETED_SPEED_MULT = 0.5;
@@ -59,8 +64,8 @@ export class Game {
   private activePowers = new Map<PowerKind, ActivePower>();
   private status: Status = "playing";
   private lastTime = 0;
-  private walkPhase = 0;
-  private legSwing = 0;
+  private hopDir: 1 | -1 = 1;
+  private hopTimeRemaining = 0;
   private airTime = 0;
   private powerupFlash = 0;
   private elapsed = 0;
@@ -98,6 +103,7 @@ export class Game {
     this.fartingPower = FARTING_MAX;
     this.attackCooldown = 0;
     this.attackFlash = 0;
+    this.hopTimeRemaining = 0;
     this.spawnPlayer();
     this.status = "playing";
     this.overlay.classList.add("hidden");
@@ -126,7 +132,7 @@ export class Game {
 
     if (this.status === "playing") {
       this.update(dt || 0);
-    } else if (consume("r")) {
+    } else if (consumeAnyAction()) {
       this.resetRun();
     }
 
@@ -148,31 +154,39 @@ export class Game {
 
     const depleted = this.fartingPower <= 0;
     const p = this.player;
-    const speed =
-      MOVE_SPEED *
-      (this.hasPower("speed") ? SPEED_BOOST_MULT : 1) *
-      (depleted ? DEPLETED_SPEED_MULT : 1);
-
-    let moveX = 0;
-    if (isDown("ArrowLeft", "a")) moveX -= 1;
-    if (isDown("ArrowRight", "d")) moveX += 1;
-    p.vx = moveX * speed;
-    if (moveX !== 0) p.facing = moveX > 0 ? 1 : -1;
-
     const flying = this.hasPower("fly");
-    if (flying) {
-      let moveY = 0;
-      if (isDown("ArrowUp", "w")) moveY -= 1;
-      if (isDown("ArrowDown", "s")) moveY += 1;
-      p.vy = moveY * FLY_SPEED_Y;
+
+    const hopInput = consumeHopDirection();
+    if (hopInput !== null && this.hopTimeRemaining <= 0) {
+      this.hopDir = hopInput;
+      this.hopTimeRemaining = HOP_DURATION;
+      p.facing = hopInput;
+      p.vy = HOP_VY_POP;
+      this.fartingPower = Math.max(0, this.fartingPower - FARTING_HOP_COST);
+    }
+
+    if (this.hopTimeRemaining > 0) {
+      this.hopTimeRemaining = Math.max(0, this.hopTimeRemaining - dt);
+      const hopSpeed =
+        HOP_SPEED *
+        (this.hasPower("speed") ? SPEED_BOOST_MULT : 1) *
+        (depleted ? DEPLETED_SPEED_MULT : 1);
+      p.vx = this.hopDir * hopSpeed;
     } else {
-      if (isDown("ArrowUp", "w") && p.onGround) {
-        const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
-        p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
-        p.onGround = false;
-        this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
-      }
+      p.vx = 0;
+    }
+
+    if (flying) {
+      p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
+    } else {
       p.vy += GRAVITY * dt;
+    }
+
+    if (consumeJump() && (p.onGround || flying)) {
+      const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
+      p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
+      p.onGround = false;
+      this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
     }
 
     if (this.attackCooldown > 0) {
@@ -181,23 +195,11 @@ export class Game {
     if (this.attackFlash > 0) {
       this.attackFlash = Math.max(0, this.attackFlash - dt);
     }
-    if (consume(" ") && this.attackCooldown <= 0) {
+    if (consumeAttack() && this.attackCooldown <= 0) {
       this.performAttack(depleted);
     }
 
     this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
-    if (moveX !== 0) {
-      this.fartingPower = Math.max(0, this.fartingPower - FARTING_MOVE_COST_PER_SEC * dt);
-    }
-
-    const walking = p.onGround && Math.abs(p.vx) > 5;
-    if (walking) {
-      this.walkPhase += dt * 16 * (speed / MOVE_SPEED);
-      this.legSwing = Math.sin(this.walkPhase);
-    } else {
-      this.walkPhase = 0;
-      this.legSwing = 0;
-    }
 
     if (p.onGround) {
       this.airTime = 0;
@@ -390,6 +392,9 @@ export class Game {
   private currentSpriteName(): SpriteName {
     if (this.attackFlash > 0) return "attack";
     if (this.powerupFlash > 0) return "powerup";
+    if (this.hopTimeRemaining > 0) {
+      return this.hopTimeRemaining > HOP_DURATION / 2 ? "hop1" : "hop2";
+    }
     if (this.hasPower("fly") && !this.player.onGround) {
       return JUMP_SEQUENCE[JUMP_SEQUENCE.length - 1];
     }
@@ -399,9 +404,6 @@ export class Game {
         Math.floor((this.airTime / JUMP_ANIM_DURATION_SEC) * JUMP_SEQUENCE.length),
       );
       return JUMP_SEQUENCE[idx];
-    }
-    if (Math.abs(this.player.vx) > 5) {
-      return this.legSwing >= 0 ? "run1" : "run2";
     }
     return "standing";
   }
