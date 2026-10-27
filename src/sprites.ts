@@ -8,6 +8,7 @@ import jump4Url from "./assets/player/jump4.png";
 import jump5Url from "./assets/player/jump5.png";
 import jump6Url from "./assets/player/jump6.png";
 import powerupUrl from "./assets/player/powerup.png";
+import attackUrl from "./assets/player/attack.png";
 
 export type SpriteName =
   | "standing"
@@ -19,7 +20,8 @@ export type SpriteName =
   | "jump4"
   | "jump5"
   | "jump6"
-  | "powerup";
+  | "powerup"
+  | "attack";
 
 const urls: Record<SpriteName, string> = {
   standing: standingUrl,
@@ -32,6 +34,7 @@ const urls: Record<SpriteName, string> = {
   jump5: jump5Url,
   jump6: jump6Url,
   powerup: powerupUrl,
+  attack: attackUrl,
 };
 
 function load(url: string): HTMLImageElement {
