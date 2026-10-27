@@ -7,14 +7,19 @@
 //                           clamped and the player sits near the left edge
 //                           of the canvas, could land in the "left half"
 //                           and hop the wrong way)
-//   double-click / double-tap -> jump
+//   double-click / double-tap -> jump, launched toward that point
 //   right-click / swipe right -> attack
 //
 // Each action is a one-shot flag, consumed (and cleared) by game.ts once per
 // frame via the consume* functions below. Click/tap positions are reported
 // in the canvas's own internal pixel space (its width/height attributes),
 // not raw page coordinates, so game.ts can compare them directly against
-// player.x.
+// player.x/y.
+
+export interface Point {
+  x: number;
+  y: number;
+}
 
 const DOUBLE_CLICK_MS = 300;
 const DOUBLE_MAX_DX = 80;
@@ -23,7 +28,7 @@ const SWIPE_MAX_DY = 60;
 const SWIPE_MAX_MS = 400;
 
 let pendingClickX: number | null = null;
-let pendingJump = false;
+let pendingJumpTarget: Point | null = null;
 let pendingAttack = false;
 
 function getCanvas(): HTMLCanvasElement | null {
@@ -39,6 +44,18 @@ function canvasLocalX(clientX: number): number {
   return ((clientX - rect.left) / rect.width) * canvas.width;
 }
 
+// Convert a page-space point into the canvas's internal pixel space.
+function canvasLocalPoint(clientX: number, clientY: number): Point {
+  const canvas = getCanvas();
+  if (!canvas) return { x: clientX, y: clientY };
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return { x: clientX, y: clientY };
+  return {
+    x: ((clientX - rect.left) / rect.width) * canvas.width,
+    y: ((clientY - rect.top) / rect.height) * canvas.height,
+  };
+}
+
 // --- mouse ------------------------------------------------------------
 
 let lastClickTime = 0;
@@ -48,7 +65,7 @@ window.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return; // right-click handled via contextmenu
   const now = performance.now();
   if (now - lastClickTime < DOUBLE_CLICK_MS && Math.abs(e.clientX - lastClickX) < DOUBLE_MAX_DX) {
-    pendingJump = true;
+    pendingJumpTarget = canvasLocalPoint(e.clientX, e.clientY);
     lastClickTime = 0;
   } else {
     pendingClickX = canvasLocalX(e.clientX);
@@ -103,7 +120,7 @@ function endTouch(e: TouchEvent): void {
 
     const now = performance.now();
     if (now - lastTapTime < DOUBLE_CLICK_MS && Math.abs(t.clientX - lastTapX) < DOUBLE_MAX_DX) {
-      pendingJump = true;
+      pendingJumpTarget = canvasLocalPoint(t.clientX, t.clientY);
       lastTapTime = 0;
     } else {
       pendingClickX = canvasLocalX(t.clientX);
@@ -128,12 +145,12 @@ export function consumeClickX(): number | null {
   return x;
 }
 
-export function consumeJump(): boolean {
-  if (pendingJump) {
-    pendingJump = false;
-    return true;
-  }
-  return false;
+// Canvas-local point a jump was requested toward, or null. game.ts aims the
+// launch at this point relative to the player's own on-screen position.
+export function consumeJump(): Point | null {
+  const target = pendingJumpTarget;
+  pendingJumpTarget = null;
+  return target;
 }
 
 export function consumeAttack(): boolean {
@@ -146,9 +163,9 @@ export function consumeAttack(): boolean {
 
 // Any pending action — used to dismiss the death/win overlay and restart.
 export function consumeAnyAction(): boolean {
-  const had = pendingClickX !== null || pendingJump || pendingAttack;
+  const had = pendingClickX !== null || pendingJumpTarget !== null || pendingAttack;
   pendingClickX = null;
-  pendingJump = false;
+  pendingJumpTarget = null;
   pendingAttack = false;
   return had;
 }

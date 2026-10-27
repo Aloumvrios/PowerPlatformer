@@ -7,7 +7,9 @@ Mouse and touch only — no keyboard:
 - **Click / tap** the left or right half of the screen — one fart-propelled
   hop in that direction. Movement is discrete, not held: tap again for
   another hop.
-- **Double-click / double-tap** — jump.
+- **Double-click / double-tap** — jump, launched toward that point. Aim
+  up-and-over to arc across a gap, or steep to climb; the trajectory is
+  always toward wherever you clicked relative to the character.
 - **Right-click / swipe right** — attack.
 - Click/tap anywhere to dismiss the death/win screen and restart.
 
@@ -17,7 +19,8 @@ Power-ups (collected by running into their glowing orb):
 - **Jump** (blue, 6s) — higher jump
 - **Shield** (cyan, 6s) — absorbs one hazard hit
 - **Fly** (wing icon, 8s) — gravity is mostly cancelled (slow float-fall);
-  jump taps give an ascend flap instead of requiring solid ground
+  jump taps give an aimed flap even mid-air, instead of requiring solid
+  ground
 - **Bean soup** (bowl icon) — instantly refills Farting Power
 
 **Farting Power** is a stamina meter (top HUD bar) that regenerates on its

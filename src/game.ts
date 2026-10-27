@@ -5,8 +5,9 @@ import type { ActivePower, Enemy, Level, PickupKind, PowerKind, Rect } from "./t
 
 const GRAVITY = 1800; // px/s^2
 const FLY_GRAVITY_MULT = 0.18; // slow float-fall while flying; ascend comes from jump taps
-const JUMP_VELOCITY = -620; // px/s
-const JUMP_BOOST_VELOCITY = -820; // px/s
+const JUMP_SPEED = 620; // px/s, launch magnitude toward the clicked point
+const JUMP_BOOST_SPEED = 820; // px/s, with the jump power-up
+const JUMP_AIM_MIN_DIST = 6; // px; closer than this, aim straight up instead
 const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 const MAX_LIVES = 3;
 const JUMP_ANIM_DURATION_SEC = 0.6;
@@ -73,6 +74,8 @@ export class Game {
   private hopDir: 1 | -1 = 1;
   private hopTimeRemaining = 0;
   private jumpBuffer = 0;
+  private jumpDirX = 0;
+  private jumpDirY = -1;
   private airTime = 0;
   private powerupFlash = 0;
   private elapsed = 0;
@@ -182,7 +185,9 @@ export class Game {
         (this.hasPower("speed") ? SPEED_BOOST_MULT : 1) *
         (depleted ? DEPLETED_SPEED_MULT : 1);
       p.vx = this.hopDir * hopSpeed;
-    } else {
+    } else if (p.onGround) {
+      // Only zero it out once grounded — otherwise this would cancel the
+      // horizontal component of an in-flight aimed jump every frame.
       p.vx = 0;
     }
 
@@ -192,14 +197,33 @@ export class Game {
       p.vy += GRAVITY * dt;
     }
 
-    if (consumeJump()) {
+    const jumpTarget = consumeJump();
+    if (jumpTarget !== null) {
+      const screenX = p.x + p.w / 2 - this.cameraX;
+      const screenY = p.y + p.h / 2;
+      const dx = jumpTarget.x - screenX;
+      const dy = jumpTarget.y - screenY;
+      const dist = Math.hypot(dx, dy);
+      if (dist < JUMP_AIM_MIN_DIST) {
+        this.jumpDirX = 0;
+        this.jumpDirY = -1;
+      } else {
+        this.jumpDirX = dx / dist;
+        this.jumpDirY = dy / dist;
+      }
       this.jumpBuffer = JUMP_BUFFER_SEC;
     }
     if (this.jumpBuffer > 0) {
       if (p.onGround || flying) {
-        const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
-        p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
+        const baseSpeed = this.hasPower("jump") ? JUMP_BOOST_SPEED : JUMP_SPEED;
+        const speed = depleted ? baseSpeed * DEPLETED_JUMP_MULT : baseSpeed;
+        p.vx = this.jumpDirX * speed;
+        p.vy = this.jumpDirY * speed;
+        if (Math.abs(this.jumpDirX) > 0.05) {
+          p.facing = this.jumpDirX > 0 ? 1 : -1;
+        }
         p.onGround = false;
+        this.hopTimeRemaining = 0; // the jump's trajectory takes over from any in-progress hop
         this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
         this.jumpBuffer = 0;
       } else {
