@@ -32,6 +32,8 @@ export class Game {
   private activePowers = new Map<PowerKind, ActivePower>();
   private status: Status = "playing";
   private lastTime = 0;
+  private walkPhase = 0;
+  private legSwing = 0;
 
   private hudLives: HTMLElement;
   private hudPower: HTMLElement;
@@ -111,6 +113,15 @@ export class Game {
     if ((isDown("ArrowUp", "w", " ")) && p.onGround) {
       p.vy = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
       p.onGround = false;
+    }
+
+    const walking = p.onGround && Math.abs(p.vx) > 5;
+    if (walking) {
+      this.walkPhase += dt * 16 * (speed / MOVE_SPEED);
+      this.legSwing = Math.sin(this.walkPhase);
+    } else {
+      this.walkPhase = 0;
+      this.legSwing = 0;
     }
 
     p.vy += GRAVITY * dt;
@@ -203,7 +214,7 @@ export class Game {
   }
 
   private render(): void {
-    const { ctx, canvas, level, cameraX, player } = this;
+    const { ctx, canvas, level, cameraX } = this;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
@@ -236,10 +247,60 @@ export class Game {
     ctx.fillStyle = "#f4d35e";
     ctx.fillRect(level.goal.x, level.goal.y, level.goal.w, level.goal.h);
 
-    ctx.fillStyle = this.hasPower("shield") ? "#6ee7ff" : "#4ade80";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
+    this.renderStickFigure();
 
     ctx.restore();
+  }
+
+  private renderStickFigure(): void {
+    const { ctx, player: p } = this;
+    const color = this.hasPower("shield") ? "#6ee7ff" : "#f5f5f5";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const cx = p.x + p.w / 2;
+    const headR = p.w * 0.24;
+    const headCy = p.y + headR;
+    const neckY = headCy + headR;
+    const hipY = p.y + p.h * 0.6;
+    const footY = p.y + p.h;
+    const legSpread = p.w * 0.34;
+    const armSpread = p.w * 0.3;
+
+    ctx.beginPath();
+    ctx.arc(cx, headCy, headR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx, neckY);
+    ctx.lineTo(cx, hipY);
+    ctx.stroke();
+
+    const armSwing = p.onGround ? this.legSwing : -0.6 * p.facing;
+    ctx.beginPath();
+    ctx.moveTo(cx, neckY + 3);
+    ctx.lineTo(cx - armSpread - armSwing * armSpread, neckY + p.h * 0.2);
+    ctx.moveTo(cx, neckY + 3);
+    ctx.lineTo(cx + armSpread + armSwing * armSpread, neckY + p.h * 0.2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    if (p.onGround) {
+      ctx.moveTo(cx, hipY);
+      ctx.lineTo(cx - legSpread - this.legSwing * legSpread, footY);
+      ctx.moveTo(cx, hipY);
+      ctx.lineTo(cx + legSpread + this.legSwing * legSpread, footY);
+    } else {
+      const dir = p.facing;
+      ctx.moveTo(cx, hipY);
+      ctx.lineTo(cx - dir * legSpread * 0.5, footY - p.h * 0.12);
+      ctx.moveTo(cx, hipY);
+      ctx.lineTo(cx + dir * legSpread, hipY + (footY - hipY) * 0.55);
+    }
+    ctx.stroke();
   }
 }
 
