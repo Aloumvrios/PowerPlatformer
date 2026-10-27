@@ -5,6 +5,7 @@ body {
   color: #eee;
   font-family: system-ui, sans-serif;
   overflow: hidden;
+  touch-action: none;
 }
 
 #game {
@@ -12,6 +13,7 @@ body {
   margin: 0 auto;
   background: #1b1d3a;
   image-rendering: pixelated;
+  touch-action: none;
 }
 
 #hud {
@@ -20,11 +22,36 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  align-items: center;
   gap: 24px;
   font-size: 18px;
   font-weight: 600;
   text-shadow: 0 1px 2px #000;
   pointer-events: none;
+}
+
+#hud-farting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#hud-farting-bar {
+  width: 120px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+#hud-farting-fill {
+  height: 100%;
+  width: 100%;
+  background: #84cc16;
+  transition: width 0.1s linear, background-color 0.2s linear;
 }
 
 #overlay {

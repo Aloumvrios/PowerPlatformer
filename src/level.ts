@@ -31,6 +31,21 @@ export const level1: Level = {
     { x: 980, y: 220, w: 28, h: 28, kind: "speed", collected: false },
     { x: 1540, y: 260, w: 28, h: 28, kind: "shield", collected: false },
     { x: 1230, y: 340, w: 28, h: 28, kind: "fly", collected: false }, // glide over the spike pit + gap ahead
+    { x: 1420, y: 420, w: 28, h: 28, kind: "beansoup", collected: false }, // refills Farting Power before the enemy patrol
+  ],
+
+  enemies: [
+    {
+      x: 1550,
+      y: 430,
+      w: 30,
+      h: 30,
+      minX: 1430,
+      maxX: 1750,
+      speed: 90,
+      dir: 1,
+      alive: true,
+    },
   ],
 
   goal: { x: 2300, y: 380, w: 36, h: 60 },

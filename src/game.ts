@@ -1,7 +1,7 @@
 import { isDown, consume } from "./input";
 import { level1 } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
-import type { ActivePower, Level, PowerKind, Rect } from "./types";
+import type { ActivePower, Enemy, Level, PickupKind, PowerKind, Rect } from "./types";
 
 const GRAVITY = 1800; // px/s^2
 const MOVE_SPEED = 280; // px/s
@@ -20,6 +20,22 @@ const POWER_DURATIONS: Record<PowerKind, number> = {
   shield: 6,
   fly: 8,
 };
+
+// Farting Power: a stamina-like resource that regenerates on its own and is
+// spent by every action. Running out doesn't lock the player out — it just
+// makes move/jump/attack weaker until it recovers (or bean soup refills it).
+const FARTING_MAX = 100;
+const FARTING_REGEN_PER_SEC = 6;
+const FARTING_MOVE_COST_PER_SEC = 8;
+const FARTING_JUMP_COST = 12;
+const FARTING_ATTACK_COST = 18;
+const DEPLETED_SPEED_MULT = 0.5;
+const DEPLETED_JUMP_MULT = 0.6;
+const DEPLETED_ATTACK_RANGE_MULT = 0.4;
+
+const ATTACK_RANGE = 40; // px, in front of the player
+const ATTACK_COOLDOWN_SEC = 0.45;
+const ATTACK_FLASH_SEC = 0.15;
 
 interface Player extends Rect {
   vx: number;
@@ -47,9 +63,14 @@ export class Game {
   private legSwing = 0;
   private airTime = 0;
   private powerupFlash = 0;
+  private elapsed = 0;
+  private fartingPower = FARTING_MAX;
+  private attackCooldown = 0;
+  private attackFlash = 0;
 
   private hudLives: HTMLElement;
   private hudPower: HTMLElement;
+  private hudFartingFill: HTMLElement;
   private overlay: HTMLElement;
   private overlayTitle: HTMLElement;
   private overlaySubtitle: HTMLElement;
@@ -58,6 +79,7 @@ export class Game {
     this.ctx = canvas.getContext("2d")!;
     this.hudLives = document.getElementById("hud-lives")!;
     this.hudPower = document.getElementById("hud-power")!;
+    this.hudFartingFill = document.getElementById("hud-farting-fill")!;
     this.overlay = document.getElementById("overlay")!;
     this.overlayTitle = document.getElementById("overlay-title")!;
     this.overlaySubtitle = document.getElementById("overlay-subtitle")!;
@@ -68,6 +90,14 @@ export class Game {
     this.lives = MAX_LIVES;
     this.activePowers.clear();
     for (const p of this.level.powerUps) p.collected = false;
+    for (const e of this.level.enemies) {
+      e.alive = true;
+      e.dir = 1;
+      e.x = e.minX;
+    }
+    this.fartingPower = FARTING_MAX;
+    this.attackCooldown = 0;
+    this.attackFlash = 0;
     this.spawnPlayer();
     this.status = "playing";
     this.overlay.classList.add("hidden");
@@ -109,13 +139,19 @@ export class Game {
   }
 
   private update(dt: number): void {
+    this.elapsed += dt;
+
     for (const [kind, power] of this.activePowers) {
       power.remainingSec -= dt;
       if (power.remainingSec <= 0) this.activePowers.delete(kind);
     }
 
+    const depleted = this.fartingPower <= 0;
     const p = this.player;
-    const speed = MOVE_SPEED * (this.hasPower("speed") ? SPEED_BOOST_MULT : 1);
+    const speed =
+      MOVE_SPEED *
+      (this.hasPower("speed") ? SPEED_BOOST_MULT : 1) *
+      (depleted ? DEPLETED_SPEED_MULT : 1);
 
     let moveX = 0;
     if (isDown("ArrowLeft", "a")) moveX -= 1;
@@ -126,15 +162,32 @@ export class Game {
     const flying = this.hasPower("fly");
     if (flying) {
       let moveY = 0;
-      if (isDown("ArrowUp", "w", " ")) moveY -= 1;
+      if (isDown("ArrowUp", "w")) moveY -= 1;
       if (isDown("ArrowDown", "s")) moveY += 1;
       p.vy = moveY * FLY_SPEED_Y;
     } else {
-      if (isDown("ArrowUp", "w", " ") && p.onGround) {
-        p.vy = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
+      if (isDown("ArrowUp", "w") && p.onGround) {
+        const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
+        p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
         p.onGround = false;
+        this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
       }
       p.vy += GRAVITY * dt;
+    }
+
+    if (this.attackCooldown > 0) {
+      this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    }
+    if (this.attackFlash > 0) {
+      this.attackFlash = Math.max(0, this.attackFlash - dt);
+    }
+    if (consume(" ") && this.attackCooldown <= 0) {
+      this.performAttack(depleted);
+    }
+
+    this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
+    if (moveX !== 0) {
+      this.fartingPower = Math.max(0, this.fartingPower - FARTING_MOVE_COST_PER_SEC * dt);
     }
 
     const walking = p.onGround && Math.abs(p.vx) > 5;
@@ -179,17 +232,35 @@ export class Game {
     }
 
     for (const hazard of this.level.hazards) {
-      if (intersects(p, hazard)) this.handleHazardHit();
+      if (intersects(p, hazard)) this.handleContactDamage();
+    }
+
+    for (const enemy of this.level.enemies) {
+      if (!enemy.alive) continue;
+      enemy.x += enemy.speed * enemy.dir * dt;
+      if (enemy.x <= enemy.minX) {
+        enemy.x = enemy.minX;
+        enemy.dir = 1;
+      } else if (enemy.x >= enemy.maxX) {
+        enemy.x = enemy.maxX;
+        enemy.dir = -1;
+      }
+      if (intersects(p, enemy)) {
+        this.handleContactDamage();
+      }
     }
 
     for (const powerUp of this.level.powerUps) {
-      if (!powerUp.collected && intersects(p, powerUp)) {
-        powerUp.collected = true;
+      if (powerUp.collected || !intersects(p, powerUp)) continue;
+      powerUp.collected = true;
+      this.powerupFlash = POWERUP_FLASH_SEC;
+      if (powerUp.kind === "beansoup") {
+        this.fartingPower = FARTING_MAX;
+      } else {
         this.activePowers.set(powerUp.kind, {
           kind: powerUp.kind,
           remainingSec: POWER_DURATIONS[powerUp.kind],
         });
-        this.powerupFlash = POWERUP_FLASH_SEC;
       }
     }
 
@@ -211,12 +282,31 @@ export class Game {
     this.updateHud();
   }
 
-  private handleHazardHit(): void {
+  private handleContactDamage(): void {
     if (this.hasPower("shield")) {
       this.activePowers.delete("shield");
       return;
     }
     this.loseLife();
+  }
+
+  private performAttack(depleted: boolean): void {
+    const p = this.player;
+    this.attackCooldown = ATTACK_COOLDOWN_SEC;
+    this.attackFlash = ATTACK_FLASH_SEC;
+    this.fartingPower = Math.max(0, this.fartingPower - FARTING_ATTACK_COST);
+
+    const range = ATTACK_RANGE * (depleted ? DEPLETED_ATTACK_RANGE_MULT : 1);
+    const hitbox: Rect =
+      p.facing === 1
+        ? { x: p.x + p.w, y: p.y, w: range, h: p.h }
+        : { x: p.x - range, y: p.y, w: range, h: p.h };
+
+    for (const enemy of this.level.enemies) {
+      if (enemy.alive && intersects(hitbox, enemy)) {
+        enemy.alive = false;
+      }
+    }
   }
 
   private handleFallDeath(): void {
@@ -245,6 +335,11 @@ export class Game {
       .map((p) => `${p.kind} ${p.remainingSec.toFixed(1)}s`)
       .join("  ");
     this.hudPower.textContent = active;
+
+    const pct = this.fartingPower / FARTING_MAX;
+    this.hudFartingFill.style.width = `${pct * 100}%`;
+    this.hudFartingFill.style.background =
+      pct > 0.5 ? "#84cc16" : pct > 0.2 ? "#facc15" : "#ef4444";
   }
 
   private render(): void {
@@ -270,6 +365,8 @@ export class Game {
       const pcy = powerUp.y + powerUp.h / 2;
       if (powerUp.kind === "fly") {
         drawWingIcon(ctx, pcx, pcy, powerUp.w / 2, powerUpColor(powerUp.kind));
+      } else if (powerUp.kind === "beansoup") {
+        drawBeanSoupIcon(ctx, pcx, pcy, powerUp.w / 2, powerUpColor(powerUp.kind));
       } else {
         ctx.fillStyle = powerUpColor(powerUp.kind);
         ctx.beginPath();
@@ -278,11 +375,38 @@ export class Game {
       }
     }
 
+    for (const enemy of level.enemies) {
+      if (enemy.alive) drawEnemy(ctx, enemy, this.elapsed);
+    }
+
     ctx.fillStyle = "#f4d35e";
     ctx.fillRect(level.goal.x, level.goal.y, level.goal.w, level.goal.h);
 
     this.renderPlayerSprite();
+    this.renderAttackFlash();
 
+    ctx.restore();
+  }
+
+  private renderAttackFlash(): void {
+    if (this.attackFlash <= 0) return;
+    const { ctx, player: p } = this;
+    const alpha = this.attackFlash / ATTACK_FLASH_SEC;
+    const dir = p.facing;
+    const baseX = dir === 1 ? p.x + p.w : p.x;
+    const cy = p.y + p.h * 0.45;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "#fef9c3";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    for (const off of [-10, 0, 10]) {
+      ctx.beginPath();
+      ctx.moveTo(baseX + dir * 4, cy + off - 10);
+      ctx.lineTo(baseX + dir * ATTACK_RANGE, cy + off + 10);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -350,7 +474,7 @@ export class Game {
   }
 }
 
-function powerUpColor(kind: PowerKind): string {
+function powerUpColor(kind: PickupKind): string {
   switch (kind) {
     case "speed":
       return "#facc15";
@@ -360,6 +484,8 @@ function powerUpColor(kind: PowerKind): string {
       return "#6ee7ff";
     case "fly":
       return "#e9d8fd";
+    case "beansoup":
+      return "#d97706";
   }
 }
 
@@ -400,5 +526,83 @@ function drawWingIcon(
     ctx.lineTo(cx - d * s * 0.5 * t, cy + s * 0.4 * t);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+// Placeholder bean soup icon — a bowl outline with a few beans and steam,
+// drawn with canvas paths until real art replaces it.
+function drawBeanSoupIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  s: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.5, s * 0.18);
+
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + s * 0.3, s * 0.9, s * 0.5, 0, 0, Math.PI, false);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + s * 0.05, s * 0.95, s * 0.3, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  for (const [bx, by] of [
+    [-0.4, -0.05],
+    [0.1, 0.1],
+    [0.45, -0.1],
+  ]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + bx * s, cy + by * s, s * 0.18, s * 0.1, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = 0.6;
+  ctx.lineWidth = Math.max(1, s * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.2, cy - s * 0.5);
+  ctx.quadraticCurveTo(cx - s * 0.35, cy - s * 0.8, cx - s * 0.1, cy - s * 1.05);
+  ctx.moveTo(cx + s * 0.25, cy - s * 0.5);
+  ctx.quadraticCurveTo(cx + s * 0.1, cy - s * 0.8, cx + s * 0.35, cy - s * 1.05);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Placeholder enemy — a spiky, bobbing urchin shape drawn with canvas paths
+// until real art replaces it.
+function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, t: number): void {
+  const cx = enemy.x + enemy.w / 2;
+  const cy = enemy.y + enemy.h / 2 + Math.sin(t * 4 + enemy.x * 0.05) * 3;
+  const r = enemy.w / 2;
+  const spikes = 8;
+
+  ctx.save();
+  ctx.fillStyle = "#b4213f";
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) {
+    const ang = (Math.PI * i) / spikes;
+    const rad = i % 2 === 0 ? r : r * 0.55;
+    const x = cx + Math.cos(ang) * rad;
+    const y = cy + Math.sin(ang) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.3, cy - r * 0.1, r * 0.18, 0, Math.PI * 2);
+  ctx.arc(cx + r * 0.3, cy - r * 0.1, r * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#1a0a0a";
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.3, cy - r * 0.1, r * 0.08, 0, Math.PI * 2);
+  ctx.arc(cx + r * 0.3, cy - r * 0.1, r * 0.08, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
