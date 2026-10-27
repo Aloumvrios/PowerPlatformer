@@ -371,9 +371,12 @@ export class Game {
         drawBeanSoupIcon(ctx, pcx, pcy, powerUp.w / 2, powerUpColor(powerUp.kind));
       } else {
         ctx.fillStyle = powerUpColor(powerUp.kind);
+        ctx.strokeStyle = "#1b1d3a";
+        ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(pcx, pcy, powerUp.w / 2, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
       }
     }
 
@@ -416,7 +419,7 @@ export class Game {
     if (this.hasPower("shield")) {
       ctx.save();
       ctx.globalAlpha = 0.35;
-      ctx.fillStyle = "#6ee7ff";
+      ctx.fillStyle = "#22d3ee";
       ctx.beginPath();
       ctx.arc(cx, p.y + p.h / 2, Math.max(p.w, p.h) * 0.95, 0, Math.PI * 2);
       ctx.fill();
@@ -461,9 +464,9 @@ function powerUpColor(kind: PickupKind): string {
     case "jump":
       return "#60a5fa";
     case "shield":
-      return "#6ee7ff";
+      return "#22d3ee";
     case "fly":
-      return "#e9d8fd";
+      return "#a78bfa";
     case "beansoup":
       return "#d97706";
   }
