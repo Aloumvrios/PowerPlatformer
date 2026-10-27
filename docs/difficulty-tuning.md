@@ -1,7 +1,7 @@
 # Difficulty tuning
 
 - **generated:** 2026-10-27
-- **command:** npm run sim -- check --update-baseline --out sim-out/check.md
+- **command:** npm run sim -- check --update-baseline
 - **players per stage and difficulty:** 1000
 - **pace:** 1
 
@@ -13,8 +13,8 @@ A player *finishes* if they reach the toilet on their first attempt (one run, al
 
 | | easy | medium | hard |
 |---|---|---|---|
-| Finish rate (first attempt) | 99% ✅ (80%–100%) | 69% ✅ (50%–70%) | 19% ❌ (20%–40%) |
-| Final Holding Power, median | 85.1 ✅ (80–100) | 28.4 ❌ (30–40) | 12.5 ❌ (5–10) |
+| Finish rate (first attempt) | 99% ✅ (80%–100%) | 69% ✅ (50%–70%) | 19% ✅ (15%–40%) |
+| Final Holding Power, median | 85.1 ✅ (80–100) | 28.4 ✅ (25–40) | 12.5 ✅ (10–15) |
 | Final Holding Power, p25–p75 | 75.0–92.7 | 14.0–46.5 | 7.0–23.0 |
 | Players finishing with Holding > 80 | 64% | 1% | 0% |
 | Finish within 3 attempts | 100% | 92% | 36% |

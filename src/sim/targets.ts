@@ -18,8 +18,8 @@ export interface Target {
 
 export const TARGETS: Record<Difficulty, Target> = {
   easy: { holding: { min: 80, max: 100 }, finishRate: { min: 0.8, max: 1 } },
-  medium: { holding: { min: 30, max: 40 }, finishRate: { min: 0.5, max: 0.7 } },
-  hard: { holding: { min: 5, max: 10 }, finishRate: { min: 0.2, max: 0.4 } },
+  medium: { holding: { min: 25, max: 40 }, finishRate: { min: 0.5, max: 0.7 } },
+  hard: { holding: { min: 10, max: 15 }, finishRate: { min: 0.15, max: 0.4 } },
 };
 
 // Per-stage exceptions to TARGETS, e.g. a deliberately tough final stage:
