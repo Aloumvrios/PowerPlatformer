@@ -1,5 +1,6 @@
 import { isDown, consume } from "./input";
 import { level1 } from "./level";
+import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import type { ActivePower, Level, PowerKind, Rect } from "./types";
 
 const GRAVITY = 1800; // px/s^2
@@ -9,6 +10,8 @@ const JUMP_VELOCITY = -620; // px/s
 const JUMP_BOOST_VELOCITY = -820; // px/s
 const POWER_DURATION_SEC = 6;
 const MAX_LIVES = 3;
+const JUMP_ANIM_DURATION_SEC = 0.6;
+const POWERUP_FLASH_SEC = 0.45;
 
 interface Player extends Rect {
   vx: number;
@@ -34,6 +37,8 @@ export class Game {
   private lastTime = 0;
   private walkPhase = 0;
   private legSwing = 0;
+  private airTime = 0;
+  private powerupFlash = 0;
 
   private hudLives: HTMLElement;
   private hudPower: HTMLElement;
@@ -124,6 +129,15 @@ export class Game {
       this.legSwing = 0;
     }
 
+    if (p.onGround) {
+      this.airTime = 0;
+    } else {
+      this.airTime += dt;
+    }
+    if (this.powerupFlash > 0) {
+      this.powerupFlash = Math.max(0, this.powerupFlash - dt);
+    }
+
     p.vy += GRAVITY * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -156,6 +170,7 @@ export class Game {
           kind: powerUp.kind,
           remainingSec: POWER_DURATION_SEC,
         });
+        this.powerupFlash = POWERUP_FLASH_SEC;
       }
     }
 
@@ -247,60 +262,59 @@ export class Game {
     ctx.fillStyle = "#f4d35e";
     ctx.fillRect(level.goal.x, level.goal.y, level.goal.w, level.goal.h);
 
-    this.renderStickFigure();
+    this.renderPlayerSprite();
 
     ctx.restore();
   }
 
-  private renderStickFigure(): void {
-    const { ctx, player: p } = this;
-    const color = this.hasPower("shield") ? "#6ee7ff" : "#f5f5f5";
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    const cx = p.x + p.w / 2;
-    const headR = p.w * 0.24;
-    const headCy = p.y + headR;
-    const neckY = headCy + headR;
-    const hipY = p.y + p.h * 0.6;
-    const footY = p.y + p.h;
-    const legSpread = p.w * 0.34;
-    const armSpread = p.w * 0.3;
-
-    ctx.beginPath();
-    ctx.arc(cx, headCy, headR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(cx, neckY);
-    ctx.lineTo(cx, hipY);
-    ctx.stroke();
-
-    const armSwing = p.onGround ? this.legSwing : -0.6 * p.facing;
-    ctx.beginPath();
-    ctx.moveTo(cx, neckY + 3);
-    ctx.lineTo(cx - armSpread - armSwing * armSpread, neckY + p.h * 0.2);
-    ctx.moveTo(cx, neckY + 3);
-    ctx.lineTo(cx + armSpread + armSwing * armSpread, neckY + p.h * 0.2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    if (p.onGround) {
-      ctx.moveTo(cx, hipY);
-      ctx.lineTo(cx - legSpread - this.legSwing * legSpread, footY);
-      ctx.moveTo(cx, hipY);
-      ctx.lineTo(cx + legSpread + this.legSwing * legSpread, footY);
-    } else {
-      const dir = p.facing;
-      ctx.moveTo(cx, hipY);
-      ctx.lineTo(cx - dir * legSpread * 0.5, footY - p.h * 0.12);
-      ctx.moveTo(cx, hipY);
-      ctx.lineTo(cx + dir * legSpread, hipY + (footY - hipY) * 0.55);
+  private currentSpriteName(): SpriteName {
+    if (this.powerupFlash > 0) return "powerup";
+    if (!this.player.onGround) {
+      const idx = Math.min(
+        JUMP_SEQUENCE.length - 1,
+        Math.floor((this.airTime / JUMP_ANIM_DURATION_SEC) * JUMP_SEQUENCE.length),
+      );
+      return JUMP_SEQUENCE[idx];
     }
-    ctx.stroke();
+    if (Math.abs(this.player.vx) > 5) {
+      return this.legSwing >= 0 ? "run1" : "run2";
+    }
+    return "standing";
+  }
+
+  private renderPlayerSprite(): void {
+    const { ctx, player: p } = this;
+    const cx = p.x + p.w / 2;
+    const bottom = p.y + p.h;
+
+    if (this.hasPower("shield")) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "#6ee7ff";
+      ctx.beginPath();
+      ctx.arc(cx, p.y + p.h / 2, Math.max(p.w, p.h) * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    const name = this.currentSpriteName();
+    const img = sprites[name];
+    if (!img.complete || img.naturalWidth === 0) return;
+
+    const targetH = name === "powerup" ? 112 : 74;
+    const scale = targetH / img.naturalHeight;
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+
+    ctx.save();
+    if (p.facing === -1) {
+      ctx.translate(cx, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -w / 2, bottom - h, w, h);
+    } else {
+      ctx.drawImage(img, cx - w / 2, bottom - h, w, h);
+    }
+    ctx.restore();
   }
 }
 
