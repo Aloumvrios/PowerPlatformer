@@ -1,4 +1,4 @@
-import type { Bean, Level } from "./types";
+import type { Banana, Bean, Level } from "./types";
 
 const BEAN_SIZE = 16;
 
@@ -11,6 +11,12 @@ function beans(x: number, y: number, n: number, dx = 34, dy = 0): Bean[] {
     h: BEAN_SIZE,
     collected: false,
   }));
+}
+
+const BANANA_SIZE = 30;
+
+function banana(cx: number, cy: number): Banana {
+  return { x: cx - BANANA_SIZE / 2, y: cy - BANANA_SIZE / 2, w: BANANA_SIZE, h: BANANA_SIZE, collected: false };
 }
 
 // A single hand-built level. Ground runs the full width; everything else
@@ -79,6 +85,14 @@ export const level1: Level = {
     ...beans(2180, 418, 2, 34),
   ],
 
+  // Off the main route or over danger, so holding it in costs a detour.
+  bananas: [
+    banana(570, 262), // big jump up from the first high platform
+    banana(1150, 190), // off the end of the high platform, mid-air
+    banana(1370, 405), // right over the spike pit
+    banana(1990, 255), // above the last high platform
+  ],
+
   checkpoints: [{ x: 1120, y: 440, w: 26, h: 60, reached: false }],
 
   hints: [
@@ -86,6 +100,7 @@ export const level1: Level = {
     { x: 300, y: 250, text: "double-tap: BIG jump", mouseText: "double-click: BIG jump" },
     { x: 700, y: 200, text: "hold: fart-fly!", mouseText: "hold the button: fart-fly!" },
     { x: 1000, y: 150, text: "flying burns Farting Power — watch the meter" },
+    { x: 420, y: 214, text: "bananas = hold it longer" },
     { x: 1600, y: 400, text: "swipe: fart attack", mouseText: "right-click: fart attack" },
     { x: 2150, y: 300, text: "nature calls →" },
   ],

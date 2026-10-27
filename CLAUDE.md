@@ -45,7 +45,7 @@ pushing to `main` ships.
   input primitives (click target, jump target, attack direction, fly target). See
   "Controls model" below. Game logic never touches `PointerEvent` directly.
 - `src/level.ts` — one hand-built `Level` object (`level1`): platforms, hazards,
-  enemies, power-ups, beans, checkpoints, pencilled-on hints, and the goal
+  enemies, power-ups, beans, bananas, checkpoints, pencilled-on hints, and the goal
   (drawn as a toilet). No level editor or loader — edit the array literals
   directly.
 - `src/sprites.ts` — imports every player sprite PNG, exposes `sprites: Record<SpriteName, HTMLImageElement>` and the `JUMP_SEQUENCE` animation order.
@@ -160,14 +160,17 @@ Order of operations matters and has bitten this project before:
 
 1. Decay active timed power-ups.
 2. **Regenerate Farting Power first**, before any action this frame spends it.
-   This ordering is deliberate — see "Farting Power" below.
+   This ordering is deliberate — see "Farting Power" below. Holding Power
+   drains here too.
 3. Resolve flight (`getFlyTarget()`), else resolve buffered weak-launch/jump
    requests, else apply gravity.
 4. Attack cooldown/flash decay, `consumeAttack()`.
 5. Integrate position, clamp to level bounds, run platform collision
    (`moveAndCollide()`).
-6. Hazards, enemies, pickups/beans/checkpoints, goal, fall-death.
-7. Idle toots, squash/stretch easing, smoothed look-ahead camera, flight-jet
+6. Hazards, enemies, pickups/beans/bananas/checkpoints, goal, Holding Power
+   "accident" (after pickups and the goal, so a last-second banana or reaching
+   the toilet that frame still saves you), fall-death.
+7. Track `furthestX`, idle toots, low-Holding-Power rumbles, squash/stretch easing, smoothed look-ahead camera, flight-jet
    sound.
 
 **Platforms are one-way** (including the ground): you rise through them from
@@ -199,6 +202,27 @@ bearing:
 
 If you touch this again and the hard-stop regresses, it's almost certainly one of
 these two orderings.
+
+### Holding Power (the stage timer)
+
+A second 0–100 meter: how much longer the hero can hold it in. It drains on its
+own at `HOLDING_DRAIN_PER_SEC × holdingDrainMult()`, where the multiplier ramps
+(eased in, `progress²`) from 1 up to `1 + HOLDING_PROGRESS_EXTRA` as the player
+nears the toilet. Progress uses `furthestX` — the furthest the player has got
+this life — **not** the current position, so walking back doesn't buy time;
+it's reset to the spawn point on each (re)spawn.
+
+The trade-off with Farting Power: anything that refuels gas drains Holding Power
+(`HOLDING_BEAN_COST`, `HOLDING_BEANSOUP_COST`), while bananas (`level.bananas`,
+constipating) refill it (`HOLDING_BANANA`) at the cost of a little gas. Bananas
+stay eaten after a respawn, like beans.
+
+Hitting 0 is an "accident" — `die("accident")`, which costs a life like any
+other death (`dyingCause` is `"hit" | "fall" | "accident"`). Reaching a
+checkpoint saves the current Holding Power; a respawn restores that, floored at
+`HOLDING_RESPAWN_MIN` so one accident can't snowball into a death spiral. Below
+`HOLDING_LOW` the stomach rumbles (`updateRumble()`), the screen shakes and the
+hero trembles.
 
 ### Sprite selection
 
