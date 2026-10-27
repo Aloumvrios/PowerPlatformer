@@ -786,6 +786,27 @@ export function drawButton(ctx: CanvasRenderingContext2D, r: Rect, icon: ButtonI
 
 // Hand-lettered text: a slight per-word wobble in angle so it doesn't look
 // typeset. Drawn centred at (x, y) unless `align` says otherwise.
+// A labelled paper button, e.g. the difficulty picker; the selected one is
+// highlighted and lettered in marker.
+export function drawTextButton(
+  ctx: CanvasRenderingContext2D,
+  r: Rect,
+  label: string,
+  selected: boolean,
+  seed: number,
+): void {
+  ctx.save();
+  ctx.fillStyle = selected ? "rgba(242, 201, 76, 0.9)" : "rgba(251, 247, 234, 0.85)";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = selected ? 2.6 : 1.6;
+  sketchRect(ctx, r, seed, 1);
+  ctx.restore();
+  handText(ctx, label, r.x + r.w / 2, r.y + r.h / 2 + 1, selected ? 22 : 22, selected ? INK : "#4a4a5c", {
+    font: selected ? MARKER_FONT : undefined,
+  });
+}
+
 export function handText(
   ctx: CanvasRenderingContext2D,
   text: string,
