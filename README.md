@@ -4,23 +4,25 @@ A 2D browser platformer about chaining temporary power-ups through a level.
 
 Mouse and touch only — no keyboard:
 
-- **Click / tap** the left or right half of the screen — one fart-propelled
-  hop in that direction. Movement is discrete, not held: tap again for
-  another hop.
-- **Double-click / double-tap** — jump, launched toward that point. Aim
-  up-and-over to arc across a gap, or steep to climb; the trajectory is
-  always toward wherever you clicked relative to the character.
+- **Click / tap** — a light fart-propelled launch toward that point, aimed
+  relative to the character (not a fixed screen side). Movement is
+  discrete, not held: click again for another launch.
+- **Double-click / double-tap** — a full-strength launch toward that point.
+  Aim up-and-over to arc across a gap, or steep to climb.
+- **Press and hold** (don't release) — fly toward the pointer with full
+  manual control for as long as it's held; drag to steer. Costs Farting
+  Power continuously while held.
 - **Right-click / swipe right** — attack.
 - Click/tap anywhere to dismiss the death/win screen and restart.
 
 Power-ups (collected by running into their glowing orb):
 
-- **Speed** (yellow, 6s) — faster hops
-- **Jump** (blue, 6s) — higher jump
+- **Speed** (yellow, 6s) — faster light (single-click) launches
+- **Jump** (blue, 6s) — stronger double-click launches
 - **Shield** (cyan, 6s) — absorbs one hazard hit
-- **Fly** (wing icon, 8s) — gravity is mostly cancelled (slow float-fall);
-  jump taps give an aimed flap even mid-air, instead of requiring solid
-  ground
+- **Fly** (wing icon, 8s) — on top of the hold-to-fly ability everyone has,
+  gravity is also mostly cancelled while grounded-or-not, and double-click
+  works as an ascend flap even mid-air
 - **Bean soup** (bowl icon) — instantly refills Farting Power
 
 **Farting Power** is a stamina meter (top HUD bar) that regenerates on its

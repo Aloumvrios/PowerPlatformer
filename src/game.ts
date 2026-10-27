@@ -1,24 +1,37 @@
-import { consumeClickX, consumeJump, consumeAttack, consumeAnyAction } from "./input";
+import { consumeClickTarget, consumeJump, consumeAttack, consumeAnyAction, getFlyTarget } from "./input";
 import { level1 } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import type { ActivePower, Enemy, Level, PickupKind, PowerKind, Rect } from "./types";
 
 const GRAVITY = 1800; // px/s^2
-const FLY_GRAVITY_MULT = 0.18; // slow float-fall while flying; ascend comes from jump taps
-const JUMP_SPEED = 620; // px/s, launch magnitude toward the clicked point
-const JUMP_BOOST_SPEED = 820; // px/s, with the jump power-up
-const JUMP_AIM_MIN_DIST = 6; // px; closer than this, aim straight up instead
-const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
+const FLY_GRAVITY_MULT = 0.18; // slow float-fall while the fly power-up is active (unheld)
 const MAX_LIVES = 3;
 const JUMP_ANIM_DURATION_SEC = 0.6;
 const POWERUP_FLASH_SEC = 0.45;
 
-// Movement is a discrete fart-propelled hop, not a held run: each tap/click
-// triggers one horizontal dash, with a small vertical pop for feel.
-const HOP_SPEED = 320; // px/s during the hop
-const HOP_DURATION = 0.28; // sec
-const HOP_VY_POP = -260; // px/s, small upward assist on hop start
+// Every click/tap is an aimed launch toward that point, not a held run.
+// A single click is a light launch; a double-click/tap is a full-strength
+// one (unchanged from before). Both share the same buffer-then-fire
+// mechanism: the direction is captured at click time, but the actual
+// launch only applies once the player is grounded (or already flying),
+// firing automatically the instant they land if that wasn't immediate.
+const WEAK_LAUNCH_SPEED = 320; // px/s, single click
+const JUMP_SPEED = 620; // px/s, double click
+const JUMP_BOOST_SPEED = 820; // px/s, double click with the jump power-up
+const LAUNCH_AIM_MIN_DIST = 6; // px; closer than this, aim straight up instead
+const LAUNCH_BUFFER_SEC = 0.3;
+const WEAK_LAUNCH_ANIM_SEC = 0.3; // cosmetic only: hop1 vs hop2 split while airborne
 const SPEED_BOOST_MULT = 1.8;
+
+// Press and hold (don't release) to fly toward the pointer: full manual
+// velocity control, bypassing gravity for as long as it's held. Placeholder
+// pose for now (reuses the jump sequence's last frame) until real art
+// arrives for it.
+const FLY_HOLD_SPEED = 300; // px/s
+const FLY_HOLD_MIN_DIST = 6; // px; closer than this, just hover in place
+const FARTING_FLY_HOLD_COST_PER_SEC = 14;
+
+const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 
 const POWER_DURATIONS: Record<PowerKind, number> = {
   speed: 6,
@@ -32,7 +45,7 @@ const POWER_DURATIONS: Record<PowerKind, number> = {
 // makes move/jump/attack weaker until it recovers (or bean soup refills it).
 const FARTING_MAX = 100;
 const FARTING_REGEN_PER_SEC = 6;
-const FARTING_HOP_COST = 6;
+const FARTING_WEAK_LAUNCH_COST = 6;
 const FARTING_JUMP_COST = 12;
 const FARTING_ATTACK_COST = 18;
 const DEPLETED_SPEED_MULT = 0.5;
@@ -42,12 +55,6 @@ const DEPLETED_ATTACK_RANGE_MULT = 0.4;
 const ATTACK_RANGE = 40; // px, in front of the player
 const ATTACK_COOLDOWN_SEC = 0.45;
 const ATTACK_FLASH_SEC = 0.15;
-
-// A jump request is remembered for this long so a double-click/tap that
-// lands while the player is still airborne from a hop's own vertical pop
-// (~0.29s, close to the double-click detection window itself) still fires
-// the instant they land, instead of being silently dropped.
-const JUMP_BUFFER_SEC = 0.3;
 
 interface Player extends Rect {
   vx: number;
@@ -71,11 +78,14 @@ export class Game {
   private activePowers = new Map<PowerKind, ActivePower>();
   private status: Status = "playing";
   private lastTime = 0;
-  private hopDir: 1 | -1 = 1;
-  private hopTimeRemaining = 0;
+  private weakLaunchBuffer = 0;
+  private weakDirX = 0;
+  private weakDirY = -1;
   private jumpBuffer = 0;
   private jumpDirX = 0;
   private jumpDirY = -1;
+  private launchTier: "weak" | "strong" | null = null;
+  private isHoldFlying = false;
   private airTime = 0;
   private powerupFlash = 0;
   private elapsed = 0;
@@ -113,8 +123,10 @@ export class Game {
     this.fartingPower = FARTING_MAX;
     this.attackCooldown = 0;
     this.attackFlash = 0;
-    this.hopTimeRemaining = 0;
+    this.weakLaunchBuffer = 0;
     this.jumpBuffer = 0;
+    this.launchTier = null;
+    this.isHoldFlying = false;
     this.spawnPlayer();
     this.status = "playing";
     this.overlay.classList.add("hidden");
@@ -165,69 +177,115 @@ export class Game {
 
     const depleted = this.fartingPower <= 0;
     const p = this.player;
-    const flying = this.hasPower("fly");
+    const poweredFly = this.hasPower("fly");
 
-    const clickX = consumeClickX();
-    if (clickX !== null && this.hopTimeRemaining <= 0) {
-      const playerScreenX = p.x + p.w / 2 - this.cameraX;
-      const hopInput: 1 | -1 = clickX < playerScreenX ? -1 : 1;
-      this.hopDir = hopInput;
-      this.hopTimeRemaining = HOP_DURATION;
-      p.facing = hopInput;
-      p.vy = HOP_VY_POP;
-      this.fartingPower = Math.max(0, this.fartingPower - FARTING_HOP_COST);
-    }
+    const flyHoldTarget = getFlyTarget();
+    this.isHoldFlying = flyHoldTarget !== null;
 
-    if (this.hopTimeRemaining > 0) {
-      this.hopTimeRemaining = Math.max(0, this.hopTimeRemaining - dt);
-      const hopSpeed =
-        HOP_SPEED *
-        (this.hasPower("speed") ? SPEED_BOOST_MULT : 1) *
-        (depleted ? DEPLETED_SPEED_MULT : 1);
-      p.vx = this.hopDir * hopSpeed;
-    } else if (p.onGround) {
-      // Only zero it out once grounded — otherwise this would cancel the
-      // horizontal component of an in-flight aimed jump every frame.
-      p.vx = 0;
-    }
-
-    if (flying) {
-      p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
-    } else {
-      p.vy += GRAVITY * dt;
-    }
-
-    const jumpTarget = consumeJump();
-    if (jumpTarget !== null) {
+    if (this.isHoldFlying) {
       const screenX = p.x + p.w / 2 - this.cameraX;
       const screenY = p.y + p.h / 2;
-      const dx = jumpTarget.x - screenX;
-      const dy = jumpTarget.y - screenY;
+      const dx = flyHoldTarget!.x - screenX;
+      const dy = flyHoldTarget!.y - screenY;
       const dist = Math.hypot(dx, dy);
-      if (dist < JUMP_AIM_MIN_DIST) {
-        this.jumpDirX = 0;
-        this.jumpDirY = -1;
+      const speed = FLY_HOLD_SPEED * (depleted ? DEPLETED_SPEED_MULT : 1);
+      if (dist > FLY_HOLD_MIN_DIST) {
+        p.vx = (dx / dist) * speed;
+        p.vy = (dy / dist) * speed;
+        if (Math.abs(dx) > dist * 0.05) p.facing = dx > 0 ? 1 : -1;
       } else {
-        this.jumpDirX = dx / dist;
-        this.jumpDirY = dy / dist;
+        p.vx = 0;
+        p.vy = 0;
       }
-      this.jumpBuffer = JUMP_BUFFER_SEC;
-    }
-    if (this.jumpBuffer > 0) {
-      if (p.onGround || flying) {
-        const baseSpeed = this.hasPower("jump") ? JUMP_BOOST_SPEED : JUMP_SPEED;
-        const speed = depleted ? baseSpeed * DEPLETED_JUMP_MULT : baseSpeed;
-        p.vx = this.jumpDirX * speed;
-        p.vy = this.jumpDirY * speed;
-        if (Math.abs(this.jumpDirX) > 0.05) {
-          p.facing = this.jumpDirX > 0 ? 1 : -1;
-        }
-        p.onGround = false;
-        this.hopTimeRemaining = 0; // the jump's trajectory takes over from any in-progress hop
-        this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
-        this.jumpBuffer = 0;
+      p.onGround = false;
+      this.weakLaunchBuffer = 0;
+      this.jumpBuffer = 0;
+      this.launchTier = null;
+      this.fartingPower = Math.max(0, this.fartingPower - FARTING_FLY_HOLD_COST_PER_SEC * dt);
+    } else {
+      if (poweredFly) {
+        p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
       } else {
-        this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+        p.vy += GRAVITY * dt;
+      }
+
+      // Weak launch: single click/tap.
+      const clickTarget = consumeClickTarget();
+      if (clickTarget !== null) {
+        const screenX = p.x + p.w / 2 - this.cameraX;
+        const screenY = p.y + p.h / 2;
+        const dx = clickTarget.x - screenX;
+        const dy = clickTarget.y - screenY;
+        const dist = Math.hypot(dx, dy);
+        if (dist < LAUNCH_AIM_MIN_DIST) {
+          this.weakDirX = 0;
+          this.weakDirY = -1;
+        } else {
+          this.weakDirX = dx / dist;
+          this.weakDirY = dy / dist;
+        }
+        this.weakLaunchBuffer = LAUNCH_BUFFER_SEC;
+      }
+      if (this.weakLaunchBuffer > 0) {
+        if (p.onGround || poweredFly) {
+          const baseSpeed = WEAK_LAUNCH_SPEED * (this.hasPower("speed") ? SPEED_BOOST_MULT : 1);
+          const speed = depleted ? baseSpeed * DEPLETED_SPEED_MULT : baseSpeed;
+          p.vx = this.weakDirX * speed;
+          p.vy = this.weakDirY * speed;
+          if (Math.abs(this.weakDirX) > 0.05) {
+            p.facing = this.weakDirX > 0 ? 1 : -1;
+          }
+          p.onGround = false;
+          this.launchTier = "weak";
+          this.fartingPower = Math.max(0, this.fartingPower - FARTING_WEAK_LAUNCH_COST);
+          this.weakLaunchBuffer = 0;
+        } else {
+          this.weakLaunchBuffer = Math.max(0, this.weakLaunchBuffer - dt);
+        }
+      }
+
+      // Strong launch: double-click/tap (unchanged from before).
+      const jumpTarget = consumeJump();
+      if (jumpTarget !== null) {
+        const screenX = p.x + p.w / 2 - this.cameraX;
+        const screenY = p.y + p.h / 2;
+        const dx = jumpTarget.x - screenX;
+        const dy = jumpTarget.y - screenY;
+        const dist = Math.hypot(dx, dy);
+        if (dist < LAUNCH_AIM_MIN_DIST) {
+          this.jumpDirX = 0;
+          this.jumpDirY = -1;
+        } else {
+          this.jumpDirX = dx / dist;
+          this.jumpDirY = dy / dist;
+        }
+        this.jumpBuffer = LAUNCH_BUFFER_SEC;
+      }
+      if (this.jumpBuffer > 0) {
+        if (p.onGround || poweredFly) {
+          const baseSpeed = this.hasPower("jump") ? JUMP_BOOST_SPEED : JUMP_SPEED;
+          const speed = depleted ? baseSpeed * DEPLETED_JUMP_MULT : baseSpeed;
+          p.vx = this.jumpDirX * speed;
+          p.vy = this.jumpDirY * speed;
+          if (Math.abs(this.jumpDirX) > 0.05) {
+            p.facing = this.jumpDirX > 0 ? 1 : -1;
+          }
+          p.onGround = false;
+          this.weakLaunchBuffer = 0;
+          this.launchTier = "strong";
+          this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
+          this.jumpBuffer = 0;
+        } else {
+          this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+        }
+      }
+
+      if (p.onGround) {
+        // Only zero it out once grounded and nothing fired this frame —
+        // otherwise this would cancel an in-flight launch's horizontal
+        // component the instant it starts.
+        p.vx = 0;
+        this.launchTier = null;
       }
     }
 
@@ -255,7 +313,7 @@ export class Game {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.x = Math.max(0, Math.min(p.x, this.level.widthPx - p.w));
-    if (flying) {
+    if (poweredFly || this.isHoldFlying) {
       p.y = Math.max(FLY_MIN_Y, p.y);
     }
 
@@ -437,8 +495,12 @@ export class Game {
   private currentSpriteName(): SpriteName {
     if (this.attackFlash > 0) return "attack";
     if (this.powerupFlash > 0) return "powerup";
-    if (this.hopTimeRemaining > 0) {
-      return this.hopTimeRemaining > HOP_DURATION / 2 ? "hop1" : "hop2";
+    if (this.isHoldFlying) {
+      // Placeholder pose until the real hold-to-fly art arrives.
+      return JUMP_SEQUENCE[JUMP_SEQUENCE.length - 1];
+    }
+    if (this.launchTier === "weak" && !this.player.onGround) {
+      return this.airTime < WEAK_LAUNCH_ANIM_SEC / 2 ? "hop1" : "hop2";
     }
     if (this.hasPower("fly") && !this.player.onGround) {
       return JUMP_SEQUENCE[JUMP_SEQUENCE.length - 1];
@@ -468,7 +530,7 @@ export class Game {
       ctx.restore();
     }
 
-    if (this.hasPower("fly")) {
+    if (this.hasPower("fly") || this.isHoldFlying) {
       const wingCy = p.y + p.h * 0.4;
       const wingSize = p.w * 0.65;
       ctx.save();
