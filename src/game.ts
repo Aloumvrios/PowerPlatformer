@@ -8,10 +8,18 @@ const MOVE_SPEED = 280; // px/s
 const SPEED_BOOST_MULT = 1.8;
 const JUMP_VELOCITY = -620; // px/s
 const JUMP_BOOST_VELOCITY = -820; // px/s
-const POWER_DURATION_SEC = 6;
+const FLY_SPEED_Y = 260; // px/s vertical control while flying
+const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 const MAX_LIVES = 3;
 const JUMP_ANIM_DURATION_SEC = 0.6;
 const POWERUP_FLASH_SEC = 0.45;
+
+const POWER_DURATIONS: Record<PowerKind, number> = {
+  speed: 6,
+  jump: 6,
+  shield: 6,
+  fly: 8,
+};
 
 interface Player extends Rect {
   vx: number;
@@ -115,9 +123,18 @@ export class Game {
     p.vx = moveX * speed;
     if (moveX !== 0) p.facing = moveX > 0 ? 1 : -1;
 
-    if ((isDown("ArrowUp", "w", " ")) && p.onGround) {
-      p.vy = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
-      p.onGround = false;
+    const flying = this.hasPower("fly");
+    if (flying) {
+      let moveY = 0;
+      if (isDown("ArrowUp", "w", " ")) moveY -= 1;
+      if (isDown("ArrowDown", "s")) moveY += 1;
+      p.vy = moveY * FLY_SPEED_Y;
+    } else {
+      if (isDown("ArrowUp", "w", " ") && p.onGround) {
+        p.vy = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
+        p.onGround = false;
+      }
+      p.vy += GRAVITY * dt;
     }
 
     const walking = p.onGround && Math.abs(p.vx) > 5;
@@ -138,10 +155,12 @@ export class Game {
       this.powerupFlash = Math.max(0, this.powerupFlash - dt);
     }
 
-    p.vy += GRAVITY * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.x = Math.max(0, Math.min(p.x, this.level.widthPx - p.w));
+    if (flying) {
+      p.y = Math.max(FLY_MIN_Y, p.y);
+    }
 
     p.onGround = false;
     for (const platform of this.level.platforms) {
@@ -168,7 +187,7 @@ export class Game {
         powerUp.collected = true;
         this.activePowers.set(powerUp.kind, {
           kind: powerUp.kind,
-          remainingSec: POWER_DURATION_SEC,
+          remainingSec: POWER_DURATIONS[powerUp.kind],
         });
         this.powerupFlash = POWERUP_FLASH_SEC;
       }
@@ -247,16 +266,16 @@ export class Game {
 
     for (const powerUp of level.powerUps) {
       if (powerUp.collected) continue;
-      ctx.fillStyle = powerUpColor(powerUp.kind);
-      ctx.beginPath();
-      ctx.arc(
-        powerUp.x + powerUp.w / 2,
-        powerUp.y + powerUp.h / 2,
-        powerUp.w / 2,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+      const pcx = powerUp.x + powerUp.w / 2;
+      const pcy = powerUp.y + powerUp.h / 2;
+      if (powerUp.kind === "fly") {
+        drawWingIcon(ctx, pcx, pcy, powerUp.w / 2, powerUpColor(powerUp.kind));
+      } else {
+        ctx.fillStyle = powerUpColor(powerUp.kind);
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, powerUp.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     ctx.fillStyle = "#f4d35e";
@@ -269,6 +288,9 @@ export class Game {
 
   private currentSpriteName(): SpriteName {
     if (this.powerupFlash > 0) return "powerup";
+    if (this.hasPower("fly") && !this.player.onGround) {
+      return JUMP_SEQUENCE[JUMP_SEQUENCE.length - 1];
+    }
     if (!this.player.onGround) {
       const idx = Math.min(
         JUMP_SEQUENCE.length - 1,
@@ -294,6 +316,16 @@ export class Game {
       ctx.beginPath();
       ctx.arc(cx, p.y + p.h / 2, Math.max(p.w, p.h) * 0.95, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+
+    if (this.hasPower("fly")) {
+      const wingCy = p.y + p.h * 0.4;
+      const wingSize = p.w * 0.65;
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      drawWingIcon(ctx, p.x, wingCy, wingSize, powerUpColor("fly"), false);
+      drawWingIcon(ctx, p.x + p.w, wingCy, wingSize, powerUpColor("fly"), true);
       ctx.restore();
     }
 
@@ -326,5 +358,47 @@ function powerUpColor(kind: PowerKind): string {
       return "#60a5fa";
     case "shield":
       return "#6ee7ff";
+    case "fly":
+      return "#e9d8fd";
   }
+}
+
+// Placeholder wing icon (pickup + flight aura) — a simple feathered silhouette
+// drawn with canvas paths until real art replaces it. `flip` mirrors it
+// horizontally so a pair can be drawn either side of the player.
+function drawWingIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  s: number,
+  color: string,
+  flip = false,
+): void {
+  const d = flip ? -1 : 1;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, s * 0.1);
+
+  ctx.beginPath();
+  ctx.moveTo(cx - d * s, cy + s * 0.3);
+  ctx.quadraticCurveTo(cx - d * s * 0.2, cy - s, cx + d * s, cy - s * 0.1);
+  ctx.quadraticCurveTo(
+    cx + d * s * 0.25,
+    cy + s * 0.25,
+    cx - d * s * 0.1,
+    cy + s * 0.55,
+  );
+  ctx.quadraticCurveTo(cx - d * s * 0.6, cy + s * 0.55, cx - d * s, cy + s * 0.3);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.globalAlpha *= 0.6;
+  for (const t of [0.35, 0.6, 0.85]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + d * s * (1 - t) * 0.9, cy - s * (0.1 + t * 0.5));
+    ctx.lineTo(cx - d * s * 0.5 * t, cy + s * 0.4 * t);
+    ctx.stroke();
+  }
+  ctx.restore();
 }

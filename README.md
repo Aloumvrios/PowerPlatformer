@@ -6,11 +6,12 @@ A 2D browser platformer about chaining temporary power-ups through a level.
 - **Jump**: Up / W / Space
 - **Restart**: R (on death or after clearing the level)
 
-Power-ups (collected by running into their glowing orb) last 6 seconds each:
+Power-ups (collected by running into their glowing orb):
 
-- **Speed** (yellow) — faster movement
-- **Jump** (blue) — higher jump
-- **Shield** (cyan) — absorbs one hazard hit
+- **Speed** (yellow, 6s) — faster movement
+- **Jump** (blue, 6s) — higher jump
+- **Shield** (cyan, 6s) — absorbs one hazard hit
+- **Fly** (wing icon, 8s) — ignore gravity; Up/Down (or W/S) controls altitude
 
 Falling off the level or hitting a hazard without a shield costs a life;
 running out of lives ends the run.

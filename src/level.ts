@@ -30,6 +30,7 @@ export const level1: Level = {
     { x: 300, y: 360, w: 28, h: 28, kind: "jump", collected: false },
     { x: 980, y: 220, w: 28, h: 28, kind: "speed", collected: false },
     { x: 1540, y: 260, w: 28, h: 28, kind: "shield", collected: false },
+    { x: 1230, y: 340, w: 28, h: 28, kind: "fly", collected: false }, // glide over the spike pit + gap ahead
   ],
 
   goal: { x: 2300, y: 380, w: 36, h: 60 },

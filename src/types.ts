@@ -5,7 +5,7 @@ export interface Rect {
   h: number;
 }
 
-export type PowerKind = "speed" | "jump" | "shield";
+export type PowerKind = "speed" | "jump" | "shield" | "fly";
 
 export interface PowerUp extends Rect {
   kind: PowerKind;
