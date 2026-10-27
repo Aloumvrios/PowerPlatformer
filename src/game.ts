@@ -42,6 +42,12 @@ const ATTACK_RANGE = 40; // px, in front of the player
 const ATTACK_COOLDOWN_SEC = 0.45;
 const ATTACK_FLASH_SEC = 0.15;
 
+// A jump request is remembered for this long so a double-click/tap that
+// lands while the player is still airborne from a hop's own vertical pop
+// (~0.29s, close to the double-click detection window itself) still fires
+// the instant they land, instead of being silently dropped.
+const JUMP_BUFFER_SEC = 0.3;
+
 interface Player extends Rect {
   vx: number;
   vy: number;
@@ -66,6 +72,7 @@ export class Game {
   private lastTime = 0;
   private hopDir: 1 | -1 = 1;
   private hopTimeRemaining = 0;
+  private jumpBuffer = 0;
   private airTime = 0;
   private powerupFlash = 0;
   private elapsed = 0;
@@ -104,6 +111,7 @@ export class Game {
     this.attackCooldown = 0;
     this.attackFlash = 0;
     this.hopTimeRemaining = 0;
+    this.jumpBuffer = 0;
     this.spawnPlayer();
     this.status = "playing";
     this.overlay.classList.add("hidden");
@@ -184,11 +192,19 @@ export class Game {
       p.vy += GRAVITY * dt;
     }
 
-    if (consumeJump() && (p.onGround || flying)) {
-      const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
-      p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
-      p.onGround = false;
-      this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
+    if (consumeJump()) {
+      this.jumpBuffer = JUMP_BUFFER_SEC;
+    }
+    if (this.jumpBuffer > 0) {
+      if (p.onGround || flying) {
+        const baseJump = this.hasPower("jump") ? JUMP_BOOST_VELOCITY : JUMP_VELOCITY;
+        p.vy = depleted ? baseJump * DEPLETED_JUMP_MULT : baseJump;
+        p.onGround = false;
+        this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
+        this.jumpBuffer = 0;
+      } else {
+        this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+      }
     }
 
     if (this.attackCooldown > 0) {
