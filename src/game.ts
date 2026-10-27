@@ -390,24 +390,8 @@ export class Game {
 
   private renderAttackFlash(): void {
     if (this.attackFlash <= 0) return;
-    const { ctx, player: p } = this;
     const alpha = this.attackFlash / ATTACK_FLASH_SEC;
-    const dir = p.facing;
-    const baseX = dir === 1 ? p.x + p.w : p.x;
-    const cy = p.y + p.h * 0.45;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = "#fef9c3";
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    for (const off of [-10, 0, 10]) {
-      ctx.beginPath();
-      ctx.moveTo(baseX + dir * 4, cy + off - 10);
-      ctx.lineTo(baseX + dir * ATTACK_RANGE, cy + off + 10);
-      ctx.stroke();
-    }
-    ctx.restore();
+    drawFartBlast(this.ctx, this.player, ATTACK_RANGE, alpha);
   }
 
   private currentSpriteName(): SpriteName {
@@ -604,5 +588,51 @@ function drawEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, t: number): void
   ctx.arc(cx - r * 0.3, cy - r * 0.1, r * 0.08, 0, Math.PI * 2);
   ctx.arc(cx + r * 0.3, cy - r * 0.1, r * 0.08, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+}
+
+// The attack is a fart blast (per the original sketch: braced stance, a
+// swirl at the source, motion lines and a puff cloud) rather than a swipe —
+// placeholder canvas art until real frames replace it.
+function drawFartBlast(
+  ctx: CanvasRenderingContext2D,
+  p: Rect & { facing: 1 | -1 },
+  range: number,
+  alpha: number,
+): void {
+  const dir = p.facing;
+  const originX = dir === 1 ? p.x + p.w * 0.55 : p.x + p.w * 0.45;
+  const cy = p.y + p.h * 0.78;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // little swirl at the source
+  ctx.strokeStyle = "#a3e635";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(originX - dir * 3, cy + 4, 4, 0.2, Math.PI * 1.6);
+  ctx.stroke();
+
+  // motion lines
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  for (const off of [-6, 0, 6]) {
+    ctx.beginPath();
+    ctx.moveTo(originX + dir * 8, cy + off);
+    ctx.lineTo(originX + dir * range * 0.55, cy + off);
+    ctx.stroke();
+  }
+
+  // puff cloud at the leading edge
+  const cloudX = originX + dir * range * 0.78;
+  ctx.fillStyle = "rgba(163, 230, 53, 0.55)";
+  ctx.beginPath();
+  ctx.arc(cloudX, cy - 4, 9, 0, Math.PI * 2);
+  ctx.arc(cloudX + dir * 8, cy - 10, 7, 0, Math.PI * 2);
+  ctx.arc(cloudX + dir * 3, cy + 5, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.restore();
 }
