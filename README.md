@@ -9,11 +9,13 @@ Mouse and touch only — no keyboard:
   discrete, not held: click again for another launch.
 - **Double-click / double-tap** — a full-strength launch toward that point.
   Aim up-and-over to arc across a gap, or steep to climb.
-- **Press and hold** (don't release) — fly toward the pointer with full
-  manual control for as long as it's held; drag to steer. Costs Farting
-  Power continuously while held — 2.5x a single click's cost every
-  second — and unlike every other action, this one isn't a soft
-  penalty: running out mid-flight forces a landing immediately, even
+- **Press and hold** (don't release) — fly, ascending at a constant rate
+  for as long as it's held, regardless of the pointer's vertical
+  position. Only which side of the character the pointer is on (left or
+  right) steers horizontally while flying — how far it is doesn't matter.
+  Costs Farting Power continuously while held — 2.5x a single click's
+  cost every second — and unlike every other action, this one isn't a
+  soft penalty: running out mid-flight forces a landing immediately, even
   if you keep holding. Let go and hold again once it's recovered.
 - **Right-click / swipe right** — attack.
 - Click/tap anywhere to dismiss the death/win screen and restart.

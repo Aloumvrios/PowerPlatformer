@@ -23,10 +23,12 @@ const LAUNCH_BUFFER_SEC = 0.3;
 const WEAK_LAUNCH_ANIM_SEC = 0.3; // cosmetic only: hop1 vs hop2 split while airborne
 const SPEED_BOOST_MULT = 1.8;
 
-// Press and hold (don't release) to fly toward the pointer: full manual
-// velocity control, bypassing gravity for as long as it's held.
-const FLY_HOLD_SPEED = 300; // px/s
-const FLY_HOLD_MIN_DIST = 6; // px; closer than this, just hover in place
+// Press and hold (don't release) to fly: ascends at a constant rate the
+// whole time it's held, regardless of the pointer's position — only the
+// pointer's horizontal side of the player (not how far) steers left/right.
+const FLY_HOLD_VY_SPEED = 260; // px/s, constant ascend while held
+const FLY_HOLD_VX_SPEED = 300; // px/s, horizontal steer toward the pointer's side
+const FLY_HOLD_DEADZONE_PX = 10; // px; pointer within this of the player's x -> go straight up
 
 const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 
@@ -199,19 +201,14 @@ export class Game {
 
     if (this.isHoldFlying) {
       const screenX = p.x + p.w / 2 - this.cameraX;
-      const screenY = p.y + p.h / 2;
       const dx = flyHoldTarget!.x - screenX;
-      const dy = flyHoldTarget!.y - screenY;
-      const dist = Math.hypot(dx, dy);
-      const speed = FLY_HOLD_SPEED;
-      if (dist > FLY_HOLD_MIN_DIST) {
-        p.vx = (dx / dist) * speed;
-        p.vy = (dy / dist) * speed;
-        if (Math.abs(dx) > dist * 0.05) p.facing = dx > 0 ? 1 : -1;
+      if (Math.abs(dx) > FLY_HOLD_DEADZONE_PX) {
+        p.vx = Math.sign(dx) * FLY_HOLD_VX_SPEED;
+        p.facing = dx > 0 ? 1 : -1;
       } else {
         p.vx = 0;
-        p.vy = 0;
       }
+      p.vy = -FLY_HOLD_VY_SPEED;
       p.onGround = false;
       this.weakLaunchBuffer = 0;
       this.jumpBuffer = 0;
