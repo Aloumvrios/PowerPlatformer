@@ -11,9 +11,12 @@ game framework). Controls are **mouse/touch only, no keyboard** — this was an
 explicit, repeated design decision; don't reintroduce keyboard input.
 
 Theme: "Farting Power" — a stamina resource that fuels every action (movement,
-jumping, attacking, flying), visualized as fart-propulsion effects. The player
-sprite is a hand-drawn stick figure (see "Sprite pipeline" below), not procedural
-art.
+jumping, attacking, flying), visualized as fart-propulsion effects (puff
+particles from the player's butt, a jet while flying, comic "BRAAP!" text). The
+player sprite is a hand-drawn stick figure (see "Sprite pipeline" below), not
+procedural art. Everything else uses a **notebook doodle** style: lined paper,
+wobbly pencil outlines with hatching, handwritten fonts — drawn procedurally in
+`src/doodle.ts` to match the hand-drawn hero.
 
 Deployed via GitHub Pages at `https://aloumvrios.github.io/PowerPlatformer/`,
 auto-deployed by `.github/workflows/deploy-pages.yml` on every push to `main`
@@ -22,22 +25,35 @@ pushing to `main` ships.
 
 ## Stack & file layout
 
-- `src/main.ts` — entry point. Creates the canvas, wires up `fitCanvas()` (see
-  "Canvas scaling" below), starts `Game`.
-- `src/game.ts` — the entire game: the `Game` class, its `update(dt)`/`render()`
-  loop, all physics/economy constants, HUD updates, sprite selection. This file is
-  intentionally a monolith; it has grown large through iterative feature work
-  rather than being split into systems, and that's fine for this project's size —
-  don't split it up preemptively.
+- `src/main.ts` — entry point. Wires up `fitCanvas()` (see "Canvas scaling"
+  below), loads the bundled fonts, unlocks audio on the first pointer event,
+  starts `Game`. In dev builds it also exposes the game as `window.__game` for
+  Playwright/console poking (stripped from production).
+- `src/game.ts` — the entire game: the `Game` class, its state machine, the
+  `update(dt)`/`render()` loop, all physics/economy constants, particles and
+  "juice", sprite selection, and the canvas-drawn HUD, title, pause and end
+  screens. This file is intentionally a monolith; it has grown large through
+  iterative feature work rather than being split into systems, and that's fine
+  for this project's size — don't split it up preemptively.
+- `src/doodle.ts` — pure drawing helpers for the notebook-doodle art: seeded
+  wobbly lines/rects/circles, hatching, paper background + parallax, platforms,
+  spikes, toilet, checkpoint flag, pickup icons, beans, enemy, HUD icons,
+  buttons, hand-lettered text. No game state.
+- `src/audio.ts` — WebAudio sound effects (see "Sound" below).
+- `src/view.ts` — `VIEW_W`/`VIEW_H` (960×540), the logical coordinate space.
 - `src/input.ts` — translates raw Pointer Events into the game's four discrete
   input primitives (click target, jump target, attack direction, fly target). See
   "Controls model" below. Game logic never touches `PointerEvent` directly.
 - `src/level.ts` — one hand-built `Level` object (`level1`): platforms, hazards,
-  enemies, power-up placements. No level editor or loader — edit the array
-  literals directly.
+  enemies, power-ups, beans, checkpoints, pencilled-on hints, and the goal
+  (drawn as a toilet). No level editor or loader — edit the array literals
+  directly.
 - `src/sprites.ts` — imports every player sprite PNG, exposes `sprites: Record<SpriteName, HTMLImageElement>` and the `JUMP_SEQUENCE` animation order.
 - `src/types.ts` — shared interfaces (`Rect`, `Level`, `PowerUp`, `Enemy`, etc.).
-- `src/style.css` — the whole page is just the HUD + the canvas, no other UI.
+- `src/style.css` — the page is just the canvas on a "desk" background; there is
+  no HTML UI — HUD, menus and buttons are all drawn on the canvas.
+- `src/assets/sfx/` — optional real recordings that override synth sounds (see
+  its README).
 - `src/assets/player/*.png` — hand-drawn sprite frames (see pipeline below).
 
 ## Commands
@@ -74,19 +90,35 @@ disambiguated into exactly one of:
   position, so that resolution happens in `game.ts` at call time, not at click
   time.
 
-All positions `input.ts` hands back are in **canvas-local pixel space**
-(`canvasLocalPoint()`, using `canvas.width`/`canvas.height`, the internal
-attributes — not CSS pixels), so `game.ts` can compare them directly against
-`player.x`/`player.y` without any further conversion.
+All positions `input.ts` hands back are in the **logical 960×540 space**
+(`canvasLocalPoint()`, using `VIEW_W`/`VIEW_H` — not CSS pixels, and not
+`canvas.width`, which is the HiDPI backing-store size and varies per device), so
+`game.ts` can compare them directly against `player.x`/`player.y` without any
+further conversion.
+
+**On-canvas buttons** (pause/mute/fullscreen): `game.ts` registers their rects
+every frame via `setUiButtons()`. A press that *starts* on a button never becomes
+a game action; the button's `onPress` fires synchronously on release, inside the
+pointer event, because fullscreen and audio unlock need a real user gesture (a
+callback deferred to the next `requestAnimationFrame` wouldn't qualify).
+
+`getPressIndicator()` exposes the press currently being decided (0→1 over
+`HOLD_THRESHOLD_MS`) so `game.ts` can draw a filling ring — that's what makes
+"hold to fly" discoverable.
 
 ## Canvas scaling — a gotcha, read before touching layout
 
-The canvas has a **fixed internal resolution** (960×540, set via its `width`/
-`height` HTML attributes in `index.html`) but is **scaled to fit the real
-viewport** by `main.ts`'s `fitCanvas()`, which sets `canvas.style.width/height` in
-px on load and on `resize`/`orientationchange`, preserving the 960:540 aspect
-ratio. `style.css` centers the (possibly letterboxed) canvas via flexbox on
-`body`.
+The game has a **fixed logical resolution** (960×540, `VIEW_W`/`VIEW_H`) but the
+canvas is **scaled to fit the real viewport** by `main.ts`'s `fitCanvas()`, which
+sets `canvas.style.width/height` in px on load and on `resize`/
+`orientationchange`, preserving the 16:9 aspect ratio. `style.css` centers the
+(possibly letterboxed) canvas via flexbox on `body`.
+
+`fitCanvas()` also sets the **backing store** (`canvas.width/height`) to that CSS
+size × `devicePixelRatio` (capped at 2) so line art is crisp; `render()` starts
+with `ctx.setTransform(canvas.width / VIEW_W, …)` and draws everything in logical
+units. So never use `canvas.width` as "the viewport width" in game logic — use
+`VIEW_W`.
 
 **This matters because `input.ts`'s `canvasLocalPoint()` relies on
 `getBoundingClientRect()` exactly matching what's actually drawn.** If you ever
@@ -105,6 +137,23 @@ the full 960px-wide internal viewport in `game.ts`'s `update()`) only caught up
 long after the player had already walked past what was visible. It read as "the
 camera doesn't follow" / "the player gets stuck at the edge of the screen".
 
+## Game states (`src/game.ts`)
+
+`status` is one of `title → playing ⇄ paused`, `playing → dying → playing |
+gameover`, `playing → winning → won`; `won`/`gameover` restart on tap. Menu-ish
+states *always* drain input (`consumeAnyAction()`) and only act on it after a
+short lock-out, so a tap made during the lock-out is dropped rather than queued.
+`playing` also drains input for its first `INPUT_GRACE_SEC`, so the tap that
+started the run (or the second half of a double-tap) doesn't launch the player.
+Leaving the tab/window auto-pauses.
+
+Dying: a hit without a shield costs a life and plays a short tumble (or nothing,
+for falls), then respawns at the last reached checkpoint with a blinking
+invulnerability window. Power-ups are restored on respawn; beans, killed enemies
+and checkpoints keep their progress. A shield hit instead knocks back and grants
+the same invulnerability window (before that existed, the shield broke and the
+next frame's contact killed you anyway).
+
 ## The `Game.update(dt)` loop (`src/game.ts`)
 
 Order of operations matters and has bitten this project before:
@@ -115,9 +164,17 @@ Order of operations matters and has bitten this project before:
 3. Resolve flight (`getFlyTarget()`), else resolve buffered weak-launch/jump
    requests, else apply gravity.
 4. Attack cooldown/flash decay, `consumeAttack()`.
-5. Integrate position, clamp to level bounds, run platform collision.
-6. Hazards, enemies, power-up pickups, goal, fall-death.
-7. Clamp camera, update HUD.
+5. Integrate position, clamp to level bounds, run platform collision
+   (`moveAndCollide()`).
+6. Hazards, enemies, pickups/beans/checkpoints, goal, fall-death.
+7. Idle toots, squash/stretch easing, smoothed look-ahead camera, flight-jet
+   sound.
+
+**Platforms are one-way** (including the ground): you rise through them from
+below or the side and only land from above. Landing compares against *last
+frame's* feet position, so fast falls can't tunnel through 20px platforms. On
+the ground, leftover horizontal speed bleeds off via `GROUND_FRICTION` (a short
+skid shown with the `run1`/`run2` frames) instead of stopping dead.
 
 ### Farting Power (the stamina economy)
 
@@ -145,12 +202,39 @@ these two orderings.
 
 ### Sprite selection
 
-`currentSpriteName()` is a priority chain (attack flash > powerup flash > flying >
-weak-launch hop > fly-power-up jump-flap > jump sequence by air time > standing).
+`currentSpriteName()` is a priority chain (dying/winning poses > attack flash >
+powerup flash > flying > weak-launch hop > fly-power-up jump-flap > jump sequence
+by air time > skid (run frames) > standing). Squash/stretch, lean and breathing
+are applied as transforms around the sprite's bottom-centre in `renderPlayer()`.
 `renderPlayerSprite()` flips the sprite horizontally via
 `ctx.scale(-1, 1)` when `player.facing === -1` — this is also what makes the
 attack-direction fix visible (facing is set from the resolved attack direction,
 not just movement).
+
+## Art (`src/doodle.ts`)
+
+Wobble is **seeded**, not random per frame, so shapes hold still — except for a
+deliberate "line boil": `setBoil()` cycles the seed through 3 variations ~7×/s,
+the hand-animated look where outlines shimmer. Use `stableRng` for anything that
+must not move (layout of clouds, grass). Fonts are self-hosted via
+`@fontsource/patrick-hand` (`HAND_FONT`) and `@fontsource/permanent-marker`
+(`MARKER_FONT`); `main.ts` preloads them because canvas text doesn't always
+trigger web-font loading. Ink colour is `INK` (matches the sprites'
+`(20, 20, 26)`-ish lines).
+
+The non-player art (enemy, pickups, toilet) is procedural for now; any of it can
+be swapped for photographed drawings via the sprite pipeline below.
+
+## Sound (`src/audio.ts`)
+
+All sounds are synthesized live with WebAudio (a lowpassed sawtooth with a fast
+amplitude "flutter" is the core fart). Any sound can be replaced by a real
+recording: drop `src/assets/sfx/<name>.(mp3|ogg|wav|m4a)` and it's picked up by
+`import.meta.glob` at build time — names are listed in
+`src/assets/sfx/README.md`. `fly` is a loop driven every frame by
+`setFlying(active, sputter)`; everything else is a one-shot `sfx(name)`. Audio
+only starts after `unlockAudio()` runs inside a pointer event. Mute and best time
+are persisted in `localStorage` (wrapped in try/catch).
 
 ## Sprite pipeline (hand-drawn art)
 
@@ -177,6 +261,8 @@ There's no automated test suite. Changes are verified by running the Vite dev
 server and driving the page with **Playwright** (headless Chromium, already
 available in this environment — see the top-level system docs on the pre-
 installed browser): `page.mouse`/`page.touchscreen` to simulate input,
+`window.__game` (dev server only) to set up states directly — e.g. teleport the
+player next to the toilet or set `fartingPower` — instead of playing there,
 `page.screenshot()` to capture state, occasionally CDP `Input.dispatchTouchEvent`
 for multi-touch gestures. Prefer `devices['iPhone 12']` (or similar) contexts when
 checking anything mobile/camera/viewport-related, as in the canvas-scaling fix.

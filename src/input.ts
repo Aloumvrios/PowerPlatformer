@@ -18,6 +18,13 @@
 // of being consumed. All positions are reported in the canvas's own
 // internal pixel space (its width/height attributes), not raw page
 // coordinates, so game.ts can compare them directly against player.x/y.
+//
+// On-canvas buttons (pause/mute/fullscreen) are registered by game.ts via
+// setUiButtons(); a press that starts on one is swallowed here instead of
+// becoming a game action, and its callback fires synchronously on release
+// so it still counts as a user gesture (fullscreen and audio need that).
+
+import { VIEW_H, VIEW_W } from "./view";
 
 export interface Point {
   x: number;
@@ -46,16 +53,40 @@ function getCanvas(): HTMLCanvasElement | null {
   return document.getElementById("game") as HTMLCanvasElement | null;
 }
 
-// Convert a page-space point into the canvas's internal pixel space.
+// Convert a page-space point into the game's logical 960x540 space. Not
+// canvas.width/height: those are the HiDPI backing-store size, which varies.
 function canvasLocalPoint(clientX: number, clientY: number): Point {
   const canvas = getCanvas();
   if (!canvas) return { x: clientX, y: clientY };
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return { x: clientX, y: clientY };
   return {
-    x: ((clientX - rect.left) / rect.width) * canvas.width,
-    y: ((clientY - rect.top) / rect.height) * canvas.height,
+    x: ((clientX - rect.left) / rect.width) * VIEW_W,
+    y: ((clientY - rect.top) / rect.height) * VIEW_H,
   };
+}
+
+export interface UiButton {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  onPress: () => void;
+}
+
+let uiButtons: UiButton[] = [];
+const uiPresses = new Map<number, UiButton>(); // pointerId -> button pressed
+
+export function setUiButtons(buttons: UiButton[]): void {
+  uiButtons = buttons;
+}
+
+function hitButton(pt: Point): UiButton | null {
+  for (const b of uiButtons) {
+    if (pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return b;
+  }
+  return null;
 }
 
 interface PointerState {
@@ -88,6 +119,12 @@ window.addEventListener(
   (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return; // right-click -> contextmenu
     e.preventDefault();
+
+    const button = hitButton(canvasLocalPoint(e.clientX, e.clientY));
+    if (button) {
+      uiPresses.set(e.pointerId, button);
+      return;
+    }
 
     const now = performance.now();
     if (
@@ -138,6 +175,12 @@ window.addEventListener(
 );
 
 function endPointer(e: PointerEvent): void {
+  const button = uiPresses.get(e.pointerId);
+  if (button) {
+    uiPresses.delete(e.pointerId);
+    if (hitButton(canvasLocalPoint(e.clientX, e.clientY)) === button) button.onPress();
+    return;
+  }
   const st = pointers.get(e.pointerId);
   if (!st) return;
   pointers.delete(e.pointerId);
@@ -165,6 +208,7 @@ function endPointer(e: PointerEvent): void {
 
 window.addEventListener("pointerup", endPointer, { passive: true });
 window.addEventListener("pointercancel", (e) => {
+  uiPresses.delete(e.pointerId);
   const st = pointers.get(e.pointerId);
   if (st) clearTimeout(st.holdTimer);
   pointers.delete(e.pointerId);
@@ -173,7 +217,9 @@ window.addEventListener("pointercancel", (e) => {
 
 window.addEventListener("contextmenu", (e) => {
   e.preventDefault();
-  pendingAttackClickX = canvasLocalPoint(e.clientX, e.clientY).x;
+  const pt = canvasLocalPoint(e.clientX, e.clientY);
+  if (hitButton(pt)) return;
+  pendingAttackClickX = pt.x;
 });
 
 // --- consumers ------------------------------------------------------------
@@ -214,6 +260,21 @@ export function consumeAttack(playerScreenX: number): 1 | -1 | null {
 // when nothing is currently held. Not consumed — read every frame.
 export function getFlyTarget(): Point | null {
   return flyTarget;
+}
+
+// The press currently being decided between tap and hold, for on-screen
+// feedback: `progress` runs 0 -> 1 over HOLD_THRESHOLD_MS and stays at 1
+// once it has become a hold (flight). Null when nothing is pressed, or the
+// press has drifted into a swipe.
+export function getPressIndicator(): (Point & { progress: number }) | null {
+  const now = performance.now();
+  for (const st of pointers.values()) {
+    if (st.moved) continue;
+    const pt = canvasLocalPoint(st.lastX, st.lastY);
+    const progress = st.holding ? 1 : Math.min(1, (now - st.startTime) / HOLD_THRESHOLD_MS);
+    return { ...pt, progress };
+  }
+  return null;
 }
 
 // Any pending discrete action — used to dismiss the death/win overlay and

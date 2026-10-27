@@ -28,6 +28,26 @@ export interface Enemy extends Rect {
   alive: boolean;
 }
 
+// Small collectible beans: each tops up a little Farting Power and counts
+// toward the end-of-level tally.
+export interface Bean extends Rect {
+  collected: boolean;
+}
+
+// Touching one makes it the respawn point for the rest of the run.
+export interface Checkpoint extends Rect {
+  reached: boolean;
+}
+
+// Pencilled-on instructions written into the level itself. `mouseText`
+// replaces `text` when the player is on a mouse rather than a touchscreen.
+export interface Hint {
+  x: number;
+  y: number;
+  text: string;
+  mouseText?: string;
+}
+
 export interface Level {
   widthPx: number;
   heightPx: number;
@@ -36,7 +56,10 @@ export interface Level {
   hazards: Hazard[];
   powerUps: PowerUp[];
   enemies: Enemy[];
-  goal: Rect;
+  beans: Bean[];
+  checkpoints: Checkpoint[];
+  hints: Hint[];
+  goal: Rect; // drawn as the toilet
 }
 
 export interface ActivePower {
