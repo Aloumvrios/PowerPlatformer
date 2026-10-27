@@ -2,11 +2,14 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: #eaf4fb;
-  color: #1b1d3a;
-  font-family: system-ui, sans-serif;
+  /* The "desk" around the notebook page when the screen isn't 16:9. */
+  background: #d9cfb8;
   overflow: hidden;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -14,75 +17,21 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
 }
 
 #game {
   /* Sized in px by main.ts's fitCanvas(), which keeps the 960x540 aspect
      ratio while fitting the real viewport — without it the canvas renders
-     at its raw 960x540 attribute size unscaled and, on a narrower mobile
-     screen, overflows and gets clipped by html/body's overflow: hidden.
-     That clips off whatever world-x range falls outside the visible
-     slice, including the player's spawn point, and the camera (which
-     scrolls based on the full 960px-wide internal viewport) only catches
-     up to that slice well after the player has already walked past what's
-     visible — reading as "stuck at the edge of the screen". */
+     at its raw attribute size unscaled and, on a narrower mobile screen,
+     overflows and gets clipped by html/body's overflow: hidden. That clips
+     off whatever world-x range falls outside the visible slice, including
+     the player's spawn point, and the camera (which scrolls based on the
+     full 960px-wide logical viewport) only catches up to that slice well
+     after the player has already walked past what's visible — reading as
+     "stuck at the edge of the screen". */
   display: block;
-  background: #bfe3f7;
-  image-rendering: pixelated;
+  background: #fbf7ea;
+  box-shadow: 0 6px 24px rgba(60, 45, 20, 0.25);
   touch-action: none;
-}
-
-#hud {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1b1d3a;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
-  pointer-events: none;
-}
-
-#hud-farting {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-#hud-farting-bar {
-  width: 120px;
-  height: 14px;
-  background: rgba(27, 29, 58, 0.12);
-  border: 1px solid rgba(27, 29, 58, 0.35);
-  border-radius: 7px;
-  overflow: hidden;
-}
-
-#hud-farting-fill {
-  height: 100%;
-  width: 100%;
-  background: #84cc16;
-  transition: width 0.1s linear, background-color 0.2s linear;
-}
-
-#overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  color: #eee;
-  text-align: center;
-}
-
-#overlay.hidden {
-  display: none;
 }

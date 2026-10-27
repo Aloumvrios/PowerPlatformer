@@ -1,7 +1,21 @@
-import type { Level } from "./types";
+import type { Bean, Level } from "./types";
+
+const BEAN_SIZE = 16;
+
+// A row of beans whose centers start at (x, y) and step by (dx, dy).
+function beans(x: number, y: number, n: number, dx = 34, dy = 0): Bean[] {
+  return Array.from({ length: n }, (_, i) => ({
+    x: x + i * dx - BEAN_SIZE / 2,
+    y: y + i * dy - BEAN_SIZE / 2,
+    w: BEAN_SIZE,
+    h: BEAN_SIZE,
+    collected: false,
+  }));
+}
 
 // A single hand-built level. Ground runs the full width; everything else
-// is a platform, hazard, power-up or the goal flag floating above it.
+// is a platform, hazard, power-up or the goal toilet floating above it.
+// Floating platforms are one-way: you pass up through them and land on top.
 export const level1: Level = {
   widthPx: 2400,
   heightPx: 540,
@@ -48,5 +62,33 @@ export const level1: Level = {
     },
   ],
 
-  goal: { x: 2300, y: 380, w: 36, h: 60 },
+  beans: [
+    ...beans(150, 478, 3),
+    ...beans(355, 378, 2),
+    ...beans(536, 308, 3),
+    ...beans(750, 398, 2, 40),
+    ...beans(875, 340, 2, 30, -40),
+    ...beans(1030, 238, 2),
+    ...beans(1000, 478, 3),
+    ...beans(1290, 358, 1),
+    ...beans(1340, 430, 3, 30, -6), // risky arc over the spike pit
+    ...beans(1500, 438, 3, 100),
+    ...beans(1545, 278, 2),
+    ...beans(1735, 198, 3),
+    ...beans(1960, 318, 3, 40),
+    ...beans(2180, 418, 2, 34),
+  ],
+
+  checkpoints: [{ x: 1120, y: 440, w: 26, h: 60, reached: false }],
+
+  hints: [
+    { x: 70, y: 330, text: "tap: hop toward your finger", mouseText: "click: hop toward the cursor" },
+    { x: 300, y: 250, text: "double-tap: BIG jump", mouseText: "double-click: BIG jump" },
+    { x: 700, y: 200, text: "hold: fart-fly!", mouseText: "hold the button: fart-fly!" },
+    { x: 1000, y: 150, text: "flying burns Farting Power — watch the meter" },
+    { x: 1600, y: 400, text: "swipe: fart attack", mouseText: "right-click: fart attack" },
+    { x: 2150, y: 300, text: "nature calls →" },
+  ],
+
+  goal: { x: 2288, y: 380, w: 46, h: 60 },
 };

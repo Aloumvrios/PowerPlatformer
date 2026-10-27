@@ -2,24 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#d9cfb8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>PowerPlatformer</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="hud">
-      <span id="hud-lives"></span>
-      <div id="hud-farting">
-        <span>Farting Power</span>
-        <div id="hud-farting-bar"><div id="hud-farting-fill"></div></div>
-      </div>
-      <span id="hud-power"></span>
-    </div>
+    <!-- Everything (HUD, menus, buttons) is drawn on the canvas. -->
     <canvas id="game" width="960" height="540"></canvas>
-    <div id="overlay" class="hidden">
-      <h1 id="overlay-title"></h1>
-      <p id="overlay-subtitle"></p>
-    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
