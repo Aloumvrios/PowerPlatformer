@@ -1,14 +1,5 @@
-import {
-  consumeClickTarget,
-  consumeJump,
-  consumeAttack,
-  consumeAnyAction,
-  getFlyTarget,
-  getPressIndicator,
-  setUiButtons,
-  type UiButton,
-} from "./input";
-import { level1 } from "./level";
+import { getPressIndicator, pointerInput, setUiButtons, type InputSource, type UiButton } from "./input";
+import { STAGES } from "./level";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import { isMuted, setFlying, sfx, toggleMute } from "./audio";
 import {
@@ -17,6 +8,7 @@ import {
   drawBanana,
   drawBean,
   drawButton,
+  drawTextButton,
   drawCheckpoint,
   drawEnemy,
   drawHeart,
@@ -38,10 +30,11 @@ import {
   type ButtonIcon,
 } from "./doodle";
 import type { ActivePower, Enemy, Level, PowerKind, Rect } from "./types";
+import { DEFAULT_TUNING, DIFFICULTIES, presetFor, type Difficulty, type Tuning } from "./tuning";
 import { VIEW_H, VIEW_W } from "./view";
 
-const GRAVITY = 1800; // px/s^2
-const FLY_GRAVITY_MULT = 0.18; // slow float-fall while the fly power-up is active (unheld)
+export const GRAVITY = 1800; // px/s^2
+export const FLY_GRAVITY_MULT = 0.18; // slow float-fall while the fly power-up is active (unheld)
 const MAX_LIVES = 3;
 const JUMP_ANIM_DURATION_SEC = 0.6;
 const POWERUP_FLASH_SEC = 0.45;
@@ -52,25 +45,25 @@ const POWERUP_FLASH_SEC = 0.45;
 // mechanism: the direction is captured at click time, but the actual
 // launch only applies once the player is grounded (or already flying),
 // firing automatically the instant they land if that wasn't immediate.
-const WEAK_LAUNCH_SPEED = 320; // px/s, single click
-const JUMP_SPEED = 620; // px/s, double click
-const JUMP_BOOST_SPEED = 820; // px/s, double click with the jump power-up
+export const WEAK_LAUNCH_SPEED = 320; // px/s, single click
+export const JUMP_SPEED = 620; // px/s, double click
+export const JUMP_BOOST_SPEED = 820; // px/s, double click with the jump power-up
 const LAUNCH_AIM_MIN_DIST = 6; // px; closer than this, aim straight up instead
 const LAUNCH_BUFFER_SEC = 0.3;
 const WEAK_LAUNCH_ANIM_SEC = 0.3; // cosmetic only: hop1 vs hop2 split while airborne
-const SPEED_BOOST_MULT = 1.8;
+export const SPEED_BOOST_MULT = 1.8;
 // Landing bleeds off leftover horizontal speed over a few frames (a short
 // skid, shown with the run frames) instead of stopping dead.
-const GROUND_FRICTION = 2600; // px/s^2
+export const GROUND_FRICTION = 2600; // px/s^2
 
 // Press and hold (don't release) to fly: ascends at a constant rate the
 // whole time it's held, regardless of the pointer's position — only the
 // pointer's horizontal side of the player (not how far) steers left/right.
-const FLY_HOLD_VY_SPEED = 260; // px/s, constant ascend while held
-const FLY_HOLD_VX_SPEED = 300; // px/s, horizontal steer toward the pointer's side
-const FLY_HOLD_DEADZONE_PX = 10; // px; pointer within this of the player's x -> go straight up
+export const FLY_HOLD_VY_SPEED = 260; // px/s, constant ascend while held
+export const FLY_HOLD_VX_SPEED = 300; // px/s, horizontal steer toward the pointer's side
+export const FLY_HOLD_DEADZONE_PX = 10; // px; pointer within this of the player's x -> go straight up
 
-const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
+export const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
 
 const POWER_DURATIONS: Record<PowerKind, number> = {
   speed: 6,
@@ -83,19 +76,12 @@ const POWER_WARN_SEC = 1.5; // power-up icons/auras blink for this long before e
 // Farting Power: a stamina-like resource that regenerates on its own and is
 // spent by every action. Running out doesn't lock the player out — it just
 // makes move/jump/attack weaker until it recovers (or bean soup refills it).
+// Its regen and costs live in the difficulty's Tuning (src/tuning.ts).
 const FARTING_MAX = 100;
-const FARTING_REGEN_PER_SEC = 6;
-const FARTING_WEAK_LAUNCH_COST = 6;
-const FARTING_JUMP_COST = 12;
-const FARTING_ATTACK_COST = 18;
-// Flying is continuous, not a one-off action, so it's priced per second —
-// 2.5x a single tap's cost per second of hold.
-const FARTING_FLY_HOLD_COST_PER_SEC = FARTING_WEAK_LAUNCH_COST * 2.5;
-const DEPLETED_SPEED_MULT = 0.5;
-const DEPLETED_JUMP_MULT = 0.6;
-const DEPLETED_ATTACK_RANGE_MULT = 0.4;
+export const DEPLETED_SPEED_MULT = 0.5;
+export const DEPLETED_JUMP_MULT = 0.6;
+export const DEPLETED_ATTACK_RANGE_MULT = 0.4;
 const FARTING_LOW = 22; // below this the meter blinks and the flight jet sputters
-const BEAN_FARTING = 5; // each bean tops up this much
 const BEAN_COMBO_SEC = 0.7; // beans grabbed within this of each other raise the blip's pitch
 
 // Holding Power: how much longer the hero can hold it in. It drains on its
@@ -103,18 +89,12 @@ const BEAN_COMBO_SEC = 0.7; // beans grabbed within this of each other raise the
 // that refuels Farting Power (beans, bean soup) drains it further, while
 // bananas (constipating) top it back up at the cost of a little gas.
 // Running out is an "accident": it costs a life like any other death.
+// Rates and pickup values live in the difficulty's Tuning (src/tuning.ts).
 const HOLDING_MAX = 100;
-const HOLDING_DRAIN_PER_SEC = 1.1; // at the start of the level
-const HOLDING_PROGRESS_EXTRA = 1.5; // drain multiplier ramps up to 1 + this at the toilet
-const HOLDING_BEAN_COST = 1;
-const HOLDING_BEANSOUP_COST = 15;
-const HOLDING_BANANA = 20;
-const BANANA_FARTING_COST = 10;
 const HOLDING_LOW = 25; // below this the stomach rumbles, the screen shakes and the hero trembles
-const HOLDING_RESPAWN_MIN = 40; // a respawn never leaves you closer to an accident than this
 const RUMBLE_WORDS = ["grrrumble…", "hnngh!", "gotta go!", "*clench*", "not now…"];
 
-const ATTACK_RANGE = 40; // px, in front of the player
+export const ATTACK_RANGE = 40; // px, in front of the player
 const ATTACK_COOLDOWN_SEC = 0.45;
 const ATTACK_FLASH_SEC = 0.15;
 
@@ -126,11 +106,12 @@ const DYING_SEC = 1.1;
 const WIN_SEC = 2.6;
 // Ignore input for a moment after a screen changes, so the tap that
 // started/restarted the game (or its double-tap) doesn't also launch you.
-const INPUT_GRACE_SEC = 0.3;
+export const INPUT_GRACE_SEC = 0.3;
 
 const CAM_LOOKAHEAD = 90; // px the camera leads in the facing direction
 const MAX_PARTICLES = 450;
-const BEST_TIME_KEY = "powerplatformer.bestTime";
+const BEST_TIME_KEY = "powerplatformer.bestTime"; // + "." + stage id + "." + difficulty
+const DIFFICULTY_KEY = "powerplatformer.difficulty";
 
 interface Player extends Rect {
   vx: number;
@@ -171,22 +152,78 @@ function formatTime(sec: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s.toFixed(1)}`;
 }
 
-function readBestTime(): number | null {
+function readBestTime(stageId: string, difficulty: Difficulty): number | null {
   try {
-    const v = Number(localStorage.getItem(BEST_TIME_KEY));
+    const v = Number(localStorage.getItem(`${BEST_TIME_KEY}.${stageId}.${difficulty}`));
     return v > 0 ? v : null;
   } catch {
     return null;
   }
 }
 
-type Status = "title" | "playing" | "paused" | "dying" | "winning" | "won" | "gameover";
+function readDifficulty(): Difficulty {
+  try {
+    const v = localStorage.getItem(DIFFICULTY_KEY);
+    return DIFFICULTIES.includes(v as Difficulty) ? (v as Difficulty) : "medium";
+  } catch {
+    return "medium";
+  }
+}
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+export type DeathCause = "hit" | "fall" | "accident";
+
+// Per-run numbers, for the end screens and the balancing simulator.
+export interface RunStats {
+  hops: number; // single-tap launches that fired
+  jumps: number; // double-tap launches that fired
+  attacks: number;
+  flightSec: number; // time spent holding to fly
+  depletedSec: number; // time spent with an empty Farting Power tank
+  bananasEaten: number;
+  beanSoups: number;
+  minHolding: number;
+  deathLog: { cause: DeathCause; x: number; t: number }[];
+}
+
+function emptyStats(): RunStats {
+  return {
+    hops: 0,
+    jumps: 0,
+    attacks: 0,
+    flightSec: 0,
+    depletedSec: 0,
+    bananasEaten: 0,
+    beanSoups: 0,
+    minHolding: HOLDING_MAX,
+    deathLog: [],
+  };
+}
+
+export interface GameOptions {
+  input?: InputSource;
+  // No canvas, listeners, sound or saved best times: the game is only
+  // advanced by explicit tick() calls. Used by the balancing simulator.
+  headless?: boolean;
+}
+
+// An on-canvas button: an icon (pause/mute/fullscreen) or a text label.
+type HudButton = UiButton & { icon?: ButtonIcon; label?: string; selected?: boolean };
+
+export type Status = "title" | "playing" | "paused" | "dying" | "winning" | "won" | "gameover";
 
 const STRONG_FART_WORDS = ["BRAAP!", "PFFT!", "TOOT!", "FRRRT!", "POOT!"];
 
 export class Game {
-  private ctx: CanvasRenderingContext2D;
-  private level: Level = level1;
+  private ctx!: CanvasRenderingContext2D;
+  private readonly input: InputSource;
+  private readonly headless: boolean;
+  private difficulty: Difficulty;
+  private tuning: Tuning = DEFAULT_TUNING;
+  private stats: RunStats = emptyStats();
+  private stageIndex = 0;
+  private level: Level = STAGES[0].level;
   private player!: Player;
   private cameraX = 0;
   private camLead = 0;
@@ -234,28 +271,97 @@ export class Game {
 
   // Run bookkeeping
   private respawnPoint = { x: 0, y: 0 };
-  private dyingCause: "hit" | "fall" | "accident" = "hit";
+  private dyingCause: DeathCause = "hit";
   private runTime = 0;
   private deaths = 0;
   private enemiesFarted = 0;
   private beansCollected = 0;
   private beanCombo = 0;
   private beanComboTimer = 0;
-  private bestTime: number | null = readBestTime();
+  private bestTime: number | null;
   private newBest = false;
 
-  private readonly isTouch = window.matchMedia("(pointer: coarse)").matches;
-  private readonly canFullscreen = !!document.fullscreenEnabled;
+  private readonly isTouch: boolean;
+  private readonly canFullscreen: boolean;
 
-  constructor(private canvas: HTMLCanvasElement) {
-    this.ctx = canvas.getContext("2d")!;
+  constructor(
+    private canvas: HTMLCanvasElement | null,
+    opts: GameOptions = {},
+  ) {
+    this.input = opts.input ?? pointerInput;
+    this.headless = !!opts.headless;
+    this.difficulty = this.headless ? "medium" : readDifficulty();
+    this.tuning = presetFor(STAGES[0].id, this.difficulty);
+    this.bestTime = this.headless ? null : readBestTime(STAGES[0].id, this.difficulty);
+    this.isTouch = !this.headless && window.matchMedia("(pointer: coarse)").matches;
+    this.canFullscreen = !this.headless && !!document.fullscreenEnabled;
+    if (canvas) this.ctx = canvas.getContext("2d")!;
     this.resetRun();
     this.status = "title";
 
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) this.pause();
-    });
-    window.addEventListener("blur", () => this.pause());
+    if (!this.headless) {
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) this.pause();
+      });
+      window.addEventListener("blur", () => this.pause());
+    }
+  }
+
+  // --- simulator API -------------------------------------------------------------
+  // Read-only views and controls for the balancing simulator (src/sim/).
+
+  startRun(tuning: Tuning, stageId: string): void {
+    this.setStage(STAGES.findIndex((s) => s.id === stageId));
+    this.tuning = tuning;
+    this.resetRun();
+  }
+
+  get currentStatus(): Status {
+    return this.status;
+  }
+  get timeInStatus(): number {
+    return this.stateTime;
+  }
+  get currentLevel(): Readonly<Level> {
+    return this.level;
+  }
+  get playerState(): Readonly<Player> {
+    return this.player;
+  }
+  get camera(): number {
+    return this.cameraX;
+  }
+  get farting(): number {
+    return this.fartingPower;
+  }
+  get holding(): number {
+    return this.holdingPower;
+  }
+  get holdFlying(): boolean {
+    return this.isHoldFlying;
+  }
+  get attackReady(): boolean {
+    return this.attackCooldown <= 0;
+  }
+  get invulnerable(): boolean {
+    return this.invuln > 0;
+  }
+  get activePowerState(): ReadonlyMap<PowerKind, ActivePower> {
+    return this.activePowers;
+  }
+  get runSummary() {
+    return {
+      time: this.runTime,
+      lives: this.lives,
+      deaths: this.deaths,
+      beans: this.beansCollected,
+      enemiesFarted: this.enemiesFarted,
+      holding: this.holdingPower,
+      farting: this.fartingPower,
+      furthestX: this.furthestX,
+      lastDeathCause: this.dyingCause,
+      ...this.stats,
+    };
   }
 
   private setStatus(status: Status): void {
@@ -283,9 +389,10 @@ export class Game {
     }
     this.deadEnemies = [];
     this.particles = [];
-    this.fartingPower = FARTING_MAX;
+    this.fartingPower = this.tuning.fartingStart;
     this.holdingPower = HOLDING_MAX;
     this.holdingAtCheckpoint = HOLDING_MAX;
+    this.stats = emptyStats();
     this.rumbleTimer = 0;
     this.attackCooldown = 0;
     this.attackFlash = 0;
@@ -331,6 +438,15 @@ export class Game {
   private loop(now: number): void {
     const dt = this.lastTime === 0 ? 0 : Math.min((now - this.lastTime) / 1000, 1 / 30);
     this.lastTime = now;
+    this.tick(dt);
+    this.registerButtons();
+    this.render();
+    requestAnimationFrame((t) => this.loop(t));
+  }
+
+  // One frame of game logic (no drawing). The simulator calls this
+  // directly at a fixed step instead of going through loop().
+  tick(dt: number): void {
     this.elapsed += dt;
     this.stateTime += dt;
     setBoil(this.elapsed);
@@ -339,13 +455,13 @@ export class Game {
       // Menu screens always drain input, so a tap made during a screen's
       // lock-out period is dropped rather than firing once it ends.
       case "title":
-        if (consumeAnyAction() && this.stateTime > INPUT_GRACE_SEC) {
+        if (this.input.consumeAnyAction() && this.stateTime > INPUT_GRACE_SEC) {
           sfx("ui");
           this.resetRun();
         }
         break;
       case "playing":
-        if (this.stateTime < INPUT_GRACE_SEC) consumeAnyAction();
+        if (this.stateTime < INPUT_GRACE_SEC) this.input.consumeAnyAction();
         if (this.hitStop > 0) {
           this.hitStop = Math.max(0, this.hitStop - dt);
         } else {
@@ -353,7 +469,7 @@ export class Game {
         }
         break;
       case "paused":
-        if (consumeAnyAction() && this.stateTime > INPUT_GRACE_SEC) this.setStatus("playing");
+        if (this.input.consumeAnyAction() && this.stateTime > INPUT_GRACE_SEC) this.setStatus("playing");
         break;
       case "dying":
         this.updateDying(dt);
@@ -363,8 +479,11 @@ export class Game {
         break;
       case "won":
       case "gameover":
-        if (consumeAnyAction() && this.stateTime > 0.8) {
+        if (this.input.consumeAnyAction() && this.stateTime > 0.8) {
           sfx("ui");
+          // Winning moves on to the next stage (back to the first after the
+          // last); a game over replays the same one.
+          if (this.status === "won") this.setStage((this.stageIndex + 1) % STAGES.length);
           this.resetRun();
         }
         break;
@@ -372,13 +491,9 @@ export class Game {
 
     if (this.status !== "paused" && this.hitStop <= 0) this.updateParticles(dt);
     this.shake = Math.max(0, this.shake - dt * 40);
-
-    this.registerButtons();
-    this.render();
-    requestAnimationFrame((t) => this.loop(t));
   }
 
-  private hasPower(kind: PowerKind): boolean {
+  hasPower(kind: PowerKind): boolean {
     return this.activePowers.has(kind);
   }
 
@@ -409,16 +524,19 @@ export class Game {
     // Regen first, action costs after — so a draining cost can actually
     // bring Farting Power to exactly 0 and hold it there, instead of this
     // frame's regen immediately topping it back up past a depleted check.
-    this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + FARTING_REGEN_PER_SEC * dt);
+    const tuning = this.tuning;
+    this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + tuning.fartingRegenPerSec * dt);
 
-    this.holdingPower = Math.max(0, this.holdingPower - HOLDING_DRAIN_PER_SEC * this.holdingDrainMult() * dt);
+    this.holdingPower = Math.max(0, this.holdingPower - tuning.holdingDrainPerSec * this.holdingDrainMult() * dt);
+    this.stats.minHolding = Math.min(this.stats.minHolding, this.holdingPower);
+    if (this.fartingPower <= 0) this.stats.depletedSec += dt;
 
     const depleted = this.fartingPower <= 0;
     const p = this.player;
     const poweredFly = this.hasPower("fly");
     const wasHoldFlying = this.isHoldFlying;
 
-    const flyHoldTarget = getFlyTarget();
+    const flyHoldTarget = this.input.getFlyTarget();
     if (flyHoldTarget === null) {
       this.flightExhausted = false;
     }
@@ -449,7 +567,8 @@ export class Game {
       this.weakLaunchBuffer = 0;
       this.jumpBuffer = 0;
       this.launchTier = null;
-      this.fartingPower = Math.max(0, this.fartingPower - FARTING_FLY_HOLD_COST_PER_SEC * dt);
+      this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingFlyCostPerSec * dt);
+      this.stats.flightSec += dt;
       this.emitFlightJet(dt);
       if (this.fartingPower <= 0) {
         this.flightExhausted = true;
@@ -466,7 +585,7 @@ export class Game {
       }
 
       // Weak launch: single click/tap.
-      const clickTarget = consumeClickTarget();
+      const clickTarget = this.input.consumeClickTarget();
       if (clickTarget !== null) {
         const screenX = p.x + p.w / 2 - this.cameraX;
         const screenY = p.y + p.h / 2;
@@ -494,7 +613,8 @@ export class Game {
           }
           p.onGround = false;
           this.launchTier = "weak";
-          this.fartingPower = Math.max(0, this.fartingPower - FARTING_WEAK_LAUNCH_COST);
+          this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingWeakLaunchCost);
+          this.stats.hops++;
           this.weakLaunchBuffer = 0;
           const b = this.buttPos();
           this.fartBurst(b.x, b.y, -this.weakDirX, -this.weakDirY, depleted ? 2 : 5, 120, 4, 8);
@@ -507,7 +627,7 @@ export class Game {
       }
 
       // Strong launch: double-click/tap (unchanged from before).
-      const jumpTarget = consumeJump();
+      const jumpTarget = this.input.consumeJump();
       if (jumpTarget !== null) {
         const screenX = p.x + p.w / 2 - this.cameraX;
         const screenY = p.y + p.h / 2;
@@ -536,7 +656,8 @@ export class Game {
           p.onGround = false;
           this.weakLaunchBuffer = 0;
           this.launchTier = "strong";
-          this.fartingPower = Math.max(0, this.fartingPower - FARTING_JUMP_COST);
+          this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingJumpCost);
+          this.stats.jumps++;
           this.jumpBuffer = 0;
           const b = this.buttPos();
           if (depleted) {
@@ -571,7 +692,7 @@ export class Game {
     if (this.attackFlash > 0) {
       this.attackFlash = Math.max(0, this.attackFlash - dt);
     }
-    const attackDir = consumeAttack(p.x + p.w / 2 - this.cameraX);
+    const attackDir = this.input.consumeAttack(p.x + p.w / 2 - this.cameraX);
     if (attackDir !== null && this.attackCooldown <= 0) {
       this.performAttack(depleted, attackDir);
     }
@@ -721,7 +842,8 @@ export class Game {
       this.floatText(cx, cy - 28, pickupLabel(powerUp.kind), pickupColor(powerUp.kind), 24);
       if (powerUp.kind === "beansoup") {
         this.fartingPower = FARTING_MAX;
-        this.holdingPower = Math.max(0, this.holdingPower - HOLDING_BEANSOUP_COST);
+        this.holdingPower = Math.max(0, this.holdingPower - this.tuning.holdingBeansoupCost);
+        this.stats.beanSoups++;
         this.floatText(cx, cy - 4, "…uh oh", "#8a5a2b", 20);
         sfx("beansoup");
       } else {
@@ -741,8 +863,8 @@ export class Game {
       if (bean.collected || !intersects(grab, bean)) continue;
       bean.collected = true;
       this.beansCollected++;
-      this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + BEAN_FARTING);
-      this.holdingPower = Math.max(0, this.holdingPower - HOLDING_BEAN_COST);
+      this.fartingPower = Math.min(FARTING_MAX, this.fartingPower + this.tuning.beanFarting);
+      this.holdingPower = Math.max(0, this.holdingPower - this.tuning.holdingBeanCost);
       this.beanCombo++;
       this.beanComboTimer = BEAN_COMBO_SEC;
       this.burst("spark", bean.x + bean.w / 2, bean.y + bean.h / 2, 5, 120, "#b5552a");
@@ -752,8 +874,9 @@ export class Game {
     for (const banana of this.level.bananas) {
       if (banana.collected || !intersects(grab, banana)) continue;
       banana.collected = true;
-      this.holdingPower = Math.min(HOLDING_MAX, this.holdingPower + HOLDING_BANANA);
-      this.fartingPower = Math.max(0, this.fartingPower - BANANA_FARTING_COST);
+      this.holdingPower = Math.min(HOLDING_MAX, this.holdingPower + this.tuning.holdingBanana);
+      this.fartingPower = Math.max(0, this.fartingPower - this.tuning.bananaFartingCost);
+      this.stats.bananasEaten++;
       this.rumbleTimer = 0;
       const cx = banana.x + banana.w / 2;
       const cy = banana.y + banana.h / 2;
@@ -795,12 +918,12 @@ export class Game {
   }
 
   // 1 at the start, ramping up (eased in, so the last stretch is the
-  // frantic part) to 1 + HOLDING_PROGRESS_EXTRA at the toilet.
+  // frantic part) to 1 + holdingProgressExtra at the toilet.
   private holdingDrainMult(): number {
     const start = this.level.playerStart.x;
     const end = this.level.goal.x;
     const progress = Math.max(0, Math.min(1, (this.furthestX - start) / (end - start)));
-    return 1 + HOLDING_PROGRESS_EXTRA * progress * progress;
+    return 1 + this.tuning.holdingProgressExtra * progress * progress;
   }
 
   // 0 while Holding Power is comfortable, rising to 1 as it runs out.
@@ -865,7 +988,8 @@ export class Game {
     const p = this.player;
     this.attackCooldown = ATTACK_COOLDOWN_SEC;
     this.attackFlash = ATTACK_FLASH_SEC;
-    this.fartingPower = Math.max(0, this.fartingPower - FARTING_ATTACK_COST);
+    this.fartingPower = Math.max(0, this.fartingPower - this.tuning.fartingAttackCost);
+    this.stats.attacks++;
     p.facing = dir;
 
     const range = ATTACK_RANGE * (depleted ? DEPLETED_ATTACK_RANGE_MULT : 1);
@@ -918,10 +1042,11 @@ export class Game {
     }
   }
 
-  private die(cause: "hit" | "fall" | "accident"): void {
+  private die(cause: DeathCause): void {
     const p = this.player;
     this.lives -= 1;
     this.deaths += 1;
+    this.stats.deathLog.push({ cause, x: p.x + p.w / 2, t: this.runTime });
     this.dyingCause = cause;
     this.activePowers.clear();
     this.isHoldFlying = false;
@@ -966,8 +1091,8 @@ export class Game {
     // Timed power-ups come back so a section that needed one stays
     // beatable; beans, enemies and checkpoints keep their progress.
     for (const pu of this.level.powerUps) pu.collected = false;
-    this.fartingPower = FARTING_MAX;
-    this.holdingPower = Math.max(HOLDING_RESPAWN_MIN, this.holdingAtCheckpoint);
+    this.fartingPower = this.tuning.fartingStart;
+    this.holdingPower = Math.max(this.tuning.holdingRespawnMin, this.holdingAtCheckpoint);
     this.rumbleTimer = 0;
     this.spawnPlayer();
     this.invuln = INVULN_SEC;
@@ -986,11 +1111,11 @@ export class Game {
     p.y = g.y + g.h * 0.48 - p.h;
     p.facing = 1;
     this.isHoldFlying = false;
-    if (this.bestTime === null || this.runTime < this.bestTime) {
+    if (!this.headless && (this.bestTime === null || this.runTime < this.bestTime)) {
       this.bestTime = this.runTime;
       this.newBest = true;
       try {
-        localStorage.setItem(BEST_TIME_KEY, String(this.runTime));
+        localStorage.setItem(`${BEST_TIME_KEY}.${STAGES[this.stageIndex].id}.${this.difficulty}`, String(this.runTime));
       } catch {
         // not saved, still shown this session
       }
@@ -1132,7 +1257,7 @@ export class Game {
   private registerButtons(): void {
     const size = 46;
     const y = 8;
-    const buttons: (UiButton & { icon: ButtonIcon })[] = [];
+    const buttons: HudButton[] = [];
     let x = VIEW_W - size - 8;
     if (this.canFullscreen) {
       buttons.push({
@@ -1178,17 +1303,58 @@ export class Game {
         },
       });
     }
+    if (this.status === "title") {
+      // Difficulty picker under the "How to play" card.
+      const bw = 120;
+      const gap = 16;
+      let bx = (VIEW_W - (bw * 3 + gap * 2)) / 2;
+      for (const d of DIFFICULTIES) {
+        buttons.push({
+          id: `difficulty-${d}`,
+          label: DIFFICULTY_LABEL[d],
+          selected: d === this.difficulty,
+          x: bx,
+          y: 446,
+          w: bw,
+          h: 40,
+          onPress: () => {
+            sfx("ui");
+            this.setDifficulty(d);
+          },
+        });
+        bx += bw + gap;
+      }
+    }
     this.buttons = buttons;
     setUiButtons(buttons);
   }
 
-  private buttons: (UiButton & { icon: ButtonIcon })[] = [];
+  private buttons: HudButton[] = [];
+
+  private setStage(i: number): void {
+    if (i < 0) throw new Error("unknown stage");
+    this.stageIndex = i;
+    this.level = STAGES[i].level;
+    this.tuning = presetFor(STAGES[i].id, this.difficulty);
+    this.bestTime = this.headless ? null : readBestTime(STAGES[i].id, this.difficulty);
+  }
+
+  private setDifficulty(d: Difficulty): void {
+    this.difficulty = d;
+    this.tuning = presetFor(STAGES[this.stageIndex].id, d);
+    this.bestTime = readBestTime(STAGES[this.stageIndex].id, d);
+    try {
+      localStorage.setItem(DIFFICULTY_KEY, d);
+    } catch {
+      // not remembered, still used this session
+    }
+  }
 
   // --- rendering -----------------------------------------------------------------
 
   private render(): void {
-    const { ctx, canvas, level } = this;
-    const scale = canvas.width / VIEW_W;
+    const { ctx, level } = this;
+    const scale = this.canvas!.width / VIEW_W;
     const sx = this.shake > 0 ? rand(-1, 1) * this.shake : 0;
     const sy = this.shake > 0 ? rand(-1, 1) * this.shake : 0;
     ctx.setTransform(scale, 0, 0, scale, sx * scale, sy * scale);
@@ -1285,7 +1451,7 @@ export class Game {
         this.renderTitle();
         break;
       case "paused":
-        this.renderCard("Paused", ["Tap anywhere to keep going"], 0);
+        this.renderCard("Paused", [`${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode`, "Tap anywhere to keep going"], 0);
         break;
       case "won":
         this.renderWinCard();
@@ -1295,7 +1461,7 @@ export class Game {
           this.dyingCause === "accident" ? "Too late!" : "Out of gas!",
           [
             this.dyingCause === "accident" ? "You couldn't hold it in." : "You ran out of lives.",
-            "",
+            `(${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode)`,
             this.isTouch ? "Tap to try again" : "Click to try again",
           ],
           0.02,
@@ -1303,7 +1469,10 @@ export class Game {
         break;
     }
 
-    for (const b of this.buttons) drawButton(ctx, b, b.icon, b.x);
+    for (const b of this.buttons) {
+      if (b.label !== undefined) drawTextButton(ctx, b, b.label, !!b.selected, b.x);
+      else drawButton(ctx, b, b.icon!, b.x);
+    }
   }
 
   private renderParticles(kinds: ParticleKind[]): void {
@@ -1637,9 +1806,10 @@ export class Game {
   private renderWinCard(): void {
     const ctx = this.ctx;
     ctx.save();
-    const r = this.drawCardFrame(480, 364, -0.015);
+    const r = this.drawCardFrame(480, 398, -0.015);
     handText(ctx, "Flushed it!", VIEW_W / 2, r.y + 52, 46, "#3b8fc4", { font: MARKER_FONT });
     const rows: [string, string][] = [
+      ["Stage", `${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]}`],
       ["Time", formatTime(this.runTime)],
       ["Beans", `${this.beansCollected} / ${this.level.beans.length}`],
       ["Enemies farted", String(this.enemiesFarted)],
@@ -1657,12 +1827,14 @@ export class Game {
       ctx.globalAlpha = 1;
     });
     const best = this.bestTime !== null ? formatTime(this.bestTime) : "—";
-    handText(ctx, this.newBest ? "NEW BEST TIME!" : `Best time: ${best}`, VIEW_W / 2, r.y + 296, 24, this.newBest ? "#c62f2f" : "#4a4a5c", {
+    handText(ctx, this.newBest ? "NEW BEST TIME!" : `Best time: ${best}`, VIEW_W / 2, r.y + 330, 24, this.newBest ? "#c62f2f" : "#4a4a5c", {
       font: this.newBest ? MARKER_FONT : undefined,
       angle: this.newBest ? -0.04 : 0,
     });
     if (Math.floor(this.elapsed * 2) % 2 === 0 || this.stateTime < 0.8) {
-      handText(ctx, this.isTouch ? "Tap to play again" : "Click to play again", VIEW_W / 2, r.y + 334, 24);
+      const next = this.stageIndex + 1 < STAGES.length ? STAGES[this.stageIndex + 1].name : null;
+      const verb = this.isTouch ? "Tap" : "Click";
+      handText(ctx, next ? `${verb} for ${next}` : `${verb} to play again`, VIEW_W / 2, r.y + 368, 24);
     }
     ctx.restore();
   }
@@ -1715,10 +1887,10 @@ export class Game {
     handText(ctx, "Bananas help you hold it. Get to the toilet!", card.x + card.w / 2, card.y + 230, 21, "#4a4a5c");
 
     if (Math.floor(this.elapsed * 2) % 2 === 0) {
-      handText(ctx, t ? "Tap anywhere to start" : "Click anywhere to start", VIEW_W / 2, 476, 30, "#c62f2f", { font: MARKER_FONT });
+      handText(ctx, t ? "Tap anywhere to start" : "Click anywhere to start", VIEW_W / 2, 512, 30, "#c62f2f", { font: MARKER_FONT });
     }
     if (this.bestTime !== null) {
-      handText(ctx, `Best time: ${formatTime(this.bestTime)}`, VIEW_W / 2, 516, 22, "#4a4a5c");
+      handText(ctx, `Best (${DIFFICULTY_LABEL[this.difficulty]}): ${formatTime(this.bestTime)}`, 170, 462, 20, "#4a4a5c");
     }
     if (t && window.innerHeight > window.innerWidth) {
       handText(ctx, "Tip: turn your phone sideways ⟳", VIEW_W / 2, 170, 22, "#c62f2f");

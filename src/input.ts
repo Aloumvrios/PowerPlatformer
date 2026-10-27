@@ -291,3 +291,22 @@ export function consumeAnyAction(): boolean {
   pendingAttackClickX = null;
   return had;
 }
+
+// game.ts reads input through this interface rather than the functions
+// above directly, so a scripted player (the balancing simulator in
+// src/sim/) can drive the game instead of real pointers.
+export interface InputSource {
+  consumeClickTarget(): Point | null;
+  consumeJump(): Point | null;
+  consumeAttack(playerScreenX: number): 1 | -1 | null;
+  getFlyTarget(): Point | null;
+  consumeAnyAction(): boolean;
+}
+
+export const pointerInput: InputSource = {
+  consumeClickTarget,
+  consumeJump,
+  consumeAttack,
+  getFlyTarget,
+  consumeAnyAction,
+};
