@@ -17,8 +17,9 @@ export interface Io {
   runPopulation: StagePopulationRunner; // spread across worker threads
 }
 
-// The difficulty check and the tuner's final validation use the same
-// players, so a fresh tune always passes its own check.
+// The difficulty check, the tuner's final drain calibration and its final
+// validation all use the same players, so a tune that lands on target
+// passes its own check.
 const CHECK_SEED = 1001;
 const CHECK_SESSIONS = 1000;
 const BASELINE_PATH = "docs/difficulty-baseline.json";
@@ -71,6 +72,17 @@ function pickDifficulties(opt: string | undefined): Difficulty[] {
   const ds = opt.split(",").map((s) => s.trim()) as Difficulty[];
   for (const d of ds) if (!DIFFICULTIES.includes(d)) throw new Error(`unknown difficulty "${d}"`);
   return ds;
+}
+
+// --set beanShare=0.5,holdingDrainPerSec=1.6: values to try on top of the presets.
+function parseSet(opt: string | undefined): Partial<Tuning> {
+  const overrides: Partial<Tuning> = {};
+  for (const kv of opt?.split(",") ?? []) {
+    const [k, v] = kv.split("=");
+    if (!(k in DEFAULT_TUNING) || v === undefined || isNaN(Number(v))) throw new Error(`bad --set "${kv}"`);
+    overrides[k as keyof Tuning] = Number(v);
+  }
+  return overrides;
 }
 
 const label = (d: string) => d[0].toUpperCase() + d.slice(1);
@@ -204,11 +216,15 @@ const HELP = `Usage: npm run sim -- <command> [options]
               --only easy,hard         just these difficulties (others keep their values)
               --sessions 500           simulated players per candidate
               --iterations 10          search rounds per difficulty
+              --set k=v,k=v            start the search from these values (e.g. found with evaluate --set)
   evaluate  Simulate every stage with its presets and the default values, and
             write sim-out/report.md + report.json.
               --sessions 1000
+              --stages stage2 --only hard   just these
+              --set beanShare=0.5,holdingDrainPerSec=1.6   try values on top of the presets
   trace     Print one line per simulated run, for eyeballing bot behaviour.
               --stage stage1 --difficulty medium --persona casual --runs 5
+              --verbose   also print the bot's position every 2 simulated seconds
 
   Common:   --seed 1    --pace 1 (scales bot hesitation; >1 = slower players.
                         Defaults to the pace saved in the baseline.)`;
@@ -249,10 +265,13 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const order = (["medium", "easy", "hard"] as Difficulty[]).filter((d) => only.includes(d));
       for (const d of order) {
         io.log(`Tuning ${stage.id} / ${d}…`);
-        const start = isTuned(stage.id) ? results[d] : d === "medium" ? DEFAULT_TUNING : results.medium;
+        const start = { ...(isTuned(stage.id) ? results[d] : d === "medium" ? DEFAULT_TUNING : results.medium), ...parseSet(opts.set) };
         const target = targetFor(stage.id, d);
         const r = await tune(start, start, target, { sessions, iterations, lambda: 5, seed, personas, regularize: 0.5 }, run, io.log);
-        results[d] = await calibrateDrain(r.tuning, target, CHECK_SESSIONS, seed + 500, personas, run, io.log);
+        // Calibrated on the check's own players: the check is the merge
+        // gate, and on a hard difficulty only a small share finish, so the
+        // median moves a few points between different samples of players.
+        results[d] = await calibrateDrain(r.tuning, target, CHECK_SESSIONS, CHECK_SEED, personas, run, io.log);
         io.log(`  ${stage.id} / ${d} done after ${r.evaluations} evaluations (${elapsed()})`);
       }
       const diff = (t: Tuning) =>
@@ -272,11 +291,17 @@ export async function main(argv: string[], io: Io): Promise<number> {
 
   if (cmd === "evaluate") {
     const sessions = Number(opts.sessions ?? 1000);
+    const overrides = parseSet(opts.set);
+    const only = pickDifficulties(opts.only);
     const stages: ReportStage[] = [];
     const json: Record<string, ReportEntry[]> = {};
-    for (const stage of STAGES) {
-      const entries = [await entry(io, stage.id, "default", DEFAULT_TUNING, sessions, seed, personas)];
-      for (const d of DIFFICULTIES) entries.push(await entry(io, stage.id, d, presetFor(stage.id, d), sessions, seed, personas, d));
+    for (const stage of pickStages(opts.stages)) {
+      const entries = opts.only ? [] : [await entry(io, stage.id, "default", DEFAULT_TUNING, sessions, seed, personas)];
+      for (const d of only) entries.push(await entry(io, stage.id, d, { ...presetFor(stage.id, d), ...overrides }, sessions, seed, personas, d));
+      for (const e of entries)
+        io.log(
+          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s`,
+        );
       stages.push({ title: `${stage.name} (\`${stage.id}\`)`, entries });
       json[stage.id] = entries;
     }
@@ -294,7 +319,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     const runs = Number(opts.runs ?? 3);
     for (const p of ps) {
       for (let i = 0; i < runs; i++) {
-        const s = runSession(presetFor(stageId, d), stageId, p, seed * 100003 + i);
+        const s = runSession(presetFor(stageId, d), stageId, p, seed * 100003 + i, opts.verbose ? io.log : undefined);
         s.attempts.forEach((a, n) =>
           io.log(
             `${p.name.padEnd(12)} #${i} try${n + 1} ${a.won ? "WON " : "lost"} ${a.time.toFixed(1).padStart(5)}s  holding ${a.finalHolding.toFixed(0).padStart(3)}  hops ${a.hops} jumps ${a.jumps} fly ${a.flightSec.toFixed(1)}s  beans ${a.beans} bananas ${a.bananas}  deaths ${a.deathLog.map((x) => `${x.cause}@${Math.round(x.x)}`).join(",") || "-"}`,

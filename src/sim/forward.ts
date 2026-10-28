@@ -12,6 +12,7 @@ import {
   FLY_MIN_Y,
   GRAVITY,
   GROUND_FRICTION,
+  stepEnemy,
 } from "../game";
 import type { Level, Rect } from "../types";
 
@@ -32,8 +33,9 @@ export interface ForwardStart {
 export interface ForwardAction {
   // Velocity set by a launch on the first frame (ignored while flying).
   launch?: { vx: number; vy: number };
-  // Hold to fly for `sec`, steering left/right/straight up.
-  fly?: { sec: number; dirX: -1 | 0 | 1; farting: number; netCostPerSec: number };
+  // Hold to fly for `sec`, steering left/right/straight up — straight up
+  // for the first `upSec` of it, if given (fly up, then over to a ledge).
+  fly?: { sec: number; dirX: -1 | 0 | 1; upSec?: number; farting: number; netCostPerSec: number };
   flyPowerSec: number; // remaining fly power-up time (slow fall), 0 if none
   maxSec: number;
 }
@@ -41,7 +43,8 @@ export interface ForwardAction {
 export interface ForwardResult {
   outcome: Outcome;
   t: number;
-  x: number; // player centre x where it ended
+  x: number; // player centre where it ended
+  cy: number;
   bottom: number;
   beans: number[];
   bananas: number[];
@@ -69,6 +72,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
     outcome,
     t,
     x: x + w / 2,
+    cy: y + h / 2,
     bottom: y + h,
     beans,
     bananas,
@@ -81,7 +85,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
     const fly = action.fly;
     const holding = !!fly && t < fly.sec && farting > 0;
     if (holding) {
-      vx = fly.dirX * FLY_HOLD_VX_SPEED;
+      vx = (t < (fly.upSec ?? 0) ? 0 : fly.dirX) * FLY_HOLD_VX_SPEED;
       vy = -FLY_HOLD_VY_SPEED;
       onGround = false;
       farting -= fly.netCostPerSec * DT;
@@ -98,18 +102,34 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
       }
     }
 
-    // moveAndCollide
+    // moveAndCollide: x then y against solids, then one-way platforms.
     const prevBottom = y + h;
     x += vx * DT;
-    y += vy * DT;
     if (x < 0 || x > level.widthPx - w) {
       x = Math.max(0, Math.min(x, level.widthPx - w));
       vx = 0;
     }
+    for (const s of level.solids) {
+      if (vx === 0 || !hits(x, y, w, h, s)) continue;
+      x = vx > 0 ? s.x - w : s.x + s.w;
+      vx = 0;
+    }
+    y += vy * DT;
     if (poweredFly || holding) y = Math.max(FLY_MIN_Y, y);
     const wasGround = onGround;
     onGround = false;
-    if (vy >= 0) {
+    for (const s of level.solids) {
+      if (vy === 0 || !hits(x, y, w, h, s)) continue;
+      if (vy > 0) {
+        y = s.y - h;
+        onGround = true;
+        landedOn = s;
+      } else {
+        y = s.y + s.h;
+      }
+      vy = 0;
+    }
+    if (!onGround && vy >= 0) {
       let landY = Infinity;
       let on: Rect | null = null;
       for (const p of level.platforms) {
@@ -130,14 +150,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
 
     for (const hz of level.hazards) if (hits(x, y, w, h, hz)) return result("hazard");
     for (const e of enemies) {
-      e.x += e.speed * e.dir * DT;
-      if (e.x <= e.minX) {
-        e.x = e.minX;
-        e.dir = 1;
-      } else if (e.x >= e.maxX) {
-        e.x = e.maxX;
-        e.dir = -1;
-      }
+      stepEnemy(e, DT);
       if (hits(x, y, w, h, e)) return result("enemy");
     }
     level.powerUps.forEach((pu, i) => {

@@ -1,27 +1,47 @@
 {
-  "generated": "2026-10-27",
+  "generated": "2026-10-28",
   "pace": 1,
   "sessions": 1000,
   "seed": 1001,
   "stages": {
     "stage1": {
       "easy": {
-        "finishRate": 0.985,
-        "holdingMedian": 85.1,
+        "finishRate": 0.978,
+        "holdingMedian": 86.4,
         "timeMedian": 16.9,
-        "livesLost": 0.31
+        "livesLost": 0.33
       },
       "medium": {
-        "finishRate": 0.688,
-        "holdingMedian": 28.4,
-        "timeMedian": 14.9,
-        "livesLost": 1.31
+        "finishRate": 0.695,
+        "holdingMedian": 28.5,
+        "timeMedian": 15,
+        "livesLost": 1.26
+      },
+      "hard": {
+        "finishRate": 0.184,
+        "holdingMedian": 14.7,
+        "timeMedian": 10.4,
+        "livesLost": 2.56
+      }
+    },
+    "stage2": {
+      "easy": {
+        "finishRate": 0.844,
+        "holdingMedian": 85.7,
+        "timeMedian": 61.1,
+        "livesLost": 1.02
+      },
+      "medium": {
+        "finishRate": 0.583,
+        "holdingMedian": 26.7,
+        "timeMedian": 56.2,
+        "livesLost": 1.76
       },
       "hard": {
         "finishRate": 0.191,
-        "holdingMedian": 12.5,
-        "timeMedian": 11.4,
-        "livesLost": 2.54
+        "holdingMedian": 13.8,
+        "timeMedian": 40,
+        "livesLost": 2.59
       }
     }
   }

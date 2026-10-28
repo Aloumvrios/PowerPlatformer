@@ -7,6 +7,7 @@
 // and then performs it with human-ish aim and timing error.
 import { ATTACK_RANGE, DEPLETED_ATTACK_RANGE_MULT, DEPLETED_JUMP_MULT, DEPLETED_SPEED_MULT, FLY_HOLD_DEADZONE_PX, INPUT_GRACE_SEC, JUMP_BOOST_SPEED, JUMP_SPEED, SPEED_BOOST_MULT, WEAK_LAUNCH_SPEED, type Game } from "../game";
 import type { InputSource, Point } from "../input";
+import { distanceToGoal } from "../nav";
 import type { Tuning } from "../tuning";
 import { simulateAction, type ForwardResult } from "./forward";
 import type { Persona } from "./personas";
@@ -19,7 +20,7 @@ const ROBUST_TOP_K = 6;
 
 type Plan =
   | { kind: "launch"; tier: "weak" | "strong"; angle: number }
-  | { kind: "fly"; dirX: -1 | 0 | 1; sec: number };
+  | { kind: "fly"; dirX: -1 | 0 | 1; sec: number; upSec?: number }; // straight up for upSec, then steer
 
 type Mode = "idle" | "awaitLaunch" | "flying" | "airborne";
 
@@ -32,6 +33,8 @@ export class Agent implements InputSource {
   private mode: Mode = "idle";
   private timer = 0;
   private flyDirX: -1 | 0 | 1 = 0;
+  private flyUpSec = 0; // planned straight-up part of the current hold
+  private flyElapsed = 0;
   private flyEngaged = false;
   private lastFurthest = 0;
   private stuckSec = 0;
@@ -101,8 +104,9 @@ export class Agent implements InputSource {
     if (g.timeInStatus < INPUT_GRACE_SEC + 0.02) return;
     const p = g.playerState;
 
-    const furthest = g.runSummary.furthestX;
-    if (furthest > this.lastFurthest + 10) {
+    // Stuck = no new ground covered along the route for a while.
+    const furthest = g.runSummary.progress;
+    if (furthest > this.lastFurthest + 0.005) {
       this.lastFurthest = furthest;
       this.stuckSec = 0;
     } else {
@@ -123,6 +127,7 @@ export class Agent implements InputSource {
         break;
       case "flying":
         this.timer -= dt;
+        this.flyElapsed += dt;
         this.flyTarget = this.flyPoint();
         if (g.holdFlying) this.flyEngaged = true;
         // Let go when the planned hold is over, or when the tank ran dry
@@ -155,12 +160,14 @@ export class Agent implements InputSource {
 
   private screenCenter(): Point {
     const p = this.game.playerState;
-    return { x: p.x + p.w / 2 - this.game.camera, y: p.y + p.h / 2 };
+    const cam = this.game.camera;
+    return { x: p.x + p.w / 2 - cam.x, y: p.y + p.h / 2 - cam.y };
   }
 
   private flyPoint(): Point {
     const c = this.screenCenter();
-    return { x: c.x + this.flyDirX * (FLY_HOLD_DEADZONE_PX + 60), y: c.y - 60 };
+    const dir = this.flyElapsed < this.flyUpSec ? 0 : this.flyDirX;
+    return { x: c.x + dir * (FLY_HOLD_DEADZONE_PX + 60), y: c.y - 60 };
   }
 
   private launchSpeed(tier: "weak" | "strong"): number {
@@ -201,10 +208,13 @@ export class Agent implements InputSource {
     const plan = this.choose();
     const c = this.screenCenter();
     if (plan.kind === "fly") {
+      const timing = Math.max(0.3, 1 + this.rng.normal() * this.persona.holdNoise);
       this.flyDirX = plan.dirX;
+      this.flyUpSec = (plan.upSec ?? 0) * timing;
+      this.flyElapsed = 0;
       this.flyTarget = this.flyPoint();
       this.flyEngaged = false;
-      this.timer = Math.max(0.2, plan.sec * (1 + this.rng.normal() * this.persona.holdNoise));
+      this.timer = Math.max(0.2, plan.sec * timing);
       this.mode = "flying";
       return;
     }
@@ -232,6 +242,7 @@ export class Agent implements InputSource {
         return simulateAction(level, start, {
           fly: {
             sec: plan.sec * holdScale * belief,
+            upSec: (plan.upSec ?? 0) * holdScale * belief,
             dirX: plan.dirX,
             farting: g.farting,
             netCostPerSec: this.tuning.fartingFlyCostPerSec - this.tuning.fartingRegenPerSec,
@@ -258,12 +269,18 @@ export class Agent implements InputSource {
     if (g.farting > 15 && (stuck || this.rng.next() < persona.flyiness)) {
       for (const sec of FLY_SECS) {
         plans.push({ kind: "fly", dirX: 1, sec });
+        plans.push({ kind: "fly", dirX: -1, sec });
         plans.push({ kind: "fly", dirX: 0, sec: sec * 0.6 });
       }
+      // Fly up, then steer over to one side (onto a ledge, out of a shaft).
+      for (const upSec of [0.6, 1.0, 1.4, 1.8])
+        for (const steer of [0.25, 0.5])
+          for (const dirX of [-1, 1] as const) plans.push({ kind: "fly", dirX, upSec, sec: upSec + steer });
     }
 
     const scored = plans.map((plan) => ({ plan, res: run(plan), score: 0 }));
-    for (const s of scored) s.score = this.score(s.plan, s.res, p.x + p.w / 2);
+    const fromDist = distanceToGoal(level, p.x + p.w / 2, p.y + p.h / 2);
+    for (const s of scored) s.score = this.score(s.plan, s.res, fromDist);
     scored.sort((a, b) => b.score - a.score);
 
     // Would it still work with a slightly worse aim / hold? Penalise the
@@ -289,14 +306,15 @@ export class Agent implements InputSource {
     return pool[Math.floor(this.rng.next() * pool.length)].plan;
   }
 
-  private score(plan: Plan, res: ForwardResult, fromX: number): number {
+  private score(plan: Plan, res: ForwardResult, fromDist: number): number {
     const g = this.game;
     const persona = this.persona;
     const t = this.tuning;
     if (res.outcome === "hazard" || res.outcome === "fell" || res.outcome === "timeout") return -Infinity;
     if (res.outcome === "enemy" && !g.hasPower("shield")) return -Infinity;
 
-    let score = (res.x - fromX) / 60; // progress toward the toilet
+    // Progress toward the toilet, measured along the level's route.
+    let score = (fromDist - distanceToGoal(g.currentLevel, res.x, res.cy)) / 60;
     if (res.outcome === "goal") score += 100;
     if (res.outcome === "landed") score += Math.min(res.edgeMargin, 30) / 30 * 0.5 * persona.caution;
 

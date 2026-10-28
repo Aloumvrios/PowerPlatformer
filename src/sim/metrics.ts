@@ -26,7 +26,7 @@ export interface AttemptResult {
   attacks: number;
   flightSec: number;
   depletedSec: number;
-  furthestX: number;
+  progress: number; // furthest along the route, 0..1
 }
 
 export interface SessionResult {
@@ -34,7 +34,9 @@ export interface SessionResult {
   attempts: AttemptResult[];
 }
 
-export function runSession(tuning: Tuning, stageId: string, persona: Persona, seed: number): SessionResult {
+// `onSample`, if given, is called every 2 simulated seconds with a line
+// describing where the bot is (for `trace --verbose`).
+export function runSession(tuning: Tuning, stageId: string, persona: Persona, seed: number, onSample?: (line: string) => void): SessionResult {
   const rng = new Rng(seed);
   let agent: Agent;
   const game = new Game(null, {
@@ -58,6 +60,12 @@ export function runSession(tuning: Tuning, stageId: string, persona: Persona, se
       agent.update(DT);
       game.tick(DT);
       simTime += DT;
+      if (onSample && Math.round(simTime / DT) % 120 === 0) {
+        const p = game.playerState;
+        onSample(
+          `    t=${simTime.toFixed(0)}s  x=${Math.round(p.x + p.w / 2)} y=${Math.round(p.y + p.h / 2)} ${p.onGround ? "ground" : "air   "}  holding ${game.holding.toFixed(0)}  gas ${game.farting.toFixed(0)}  progress ${game.runSummary.progress.toFixed(2)}  ${game.currentStatus}`,
+        );
+      }
       const st = game.currentStatus;
       if (st === "winning" || st === "won" || st === "gameover") break;
     }
@@ -80,7 +88,7 @@ export function runSession(tuning: Tuning, stageId: string, persona: Persona, se
       attacks: s.attacks,
       flightSec: s.flightSec,
       depletedSec: s.depletedSec,
-      furthestX: s.furthestX,
+      progress: s.progress,
     });
     if (won) break;
   }

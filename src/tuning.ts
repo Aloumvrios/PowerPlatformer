@@ -13,6 +13,7 @@ export interface Tuning {
   fartingFlyCostPerSec: number; // while holding to fly
   beanFarting: number; // each bean tops up this much
   bananaFartingCost: number; // constipated: less gas
+  beanShare: number; // 0..1: how many of the stage's beans are there (fewer = less gas to go round)
   // Holding Power
   holdingDrainPerSec: number; // at the start of the level
   holdingProgressExtra: number; // drain multiplier ramps up to 1 + this at the toilet
@@ -33,6 +34,7 @@ export const DEFAULT_TUNING: Tuning = {
   fartingFlyCostPerSec: 15,
   beanFarting: 5,
   bananaFartingCost: 10,
+  beanShare: 1,
   holdingDrainPerSec: 1.1,
   holdingProgressExtra: 1.5,
   holdingBeanCost: 1,
@@ -57,4 +59,10 @@ export function isTuned(stageId: string): boolean {
 
 export function presetFor(stageId: string, difficulty: Difficulty): Tuning {
   return { ...DEFAULT_TUNING, ...PRESETS[stageId]?.[difficulty] };
+}
+
+// Whether bean `i` is placed under a given beanShare. Golden-ratio spacing
+// thins beans out evenly along the level rather than from one end.
+export function beanPresent(i: number, share: number): boolean {
+  return ((i * 0.6180339887) % 1) < share;
 }

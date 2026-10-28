@@ -7,7 +7,7 @@ player-base metrics, and tunes the Easy / Medium / Hard presets.
 npm run sim -- check      # the PR check: every stage × difficulty on target? (exit 1 if not)
 npm run sim -- tune       # search presets → src/difficulty-presets.json + docs/difficulty-*.{md,json}
 npm run sim -- evaluate   # report on the current presets → sim-out/report.md (+ .json)
-npm run sim -- trace --stage stage1 --difficulty hard --persona newbie --runs 5
+npm run sim -- trace --stage stage1 --difficulty hard --persona newbie --runs 5 [--verbose]
 npm run sim               # full option list
 ```
 
@@ -48,8 +48,14 @@ npm run sim               # full option list
   loads this TypeScript through Vite's SSR loader and stubs the few browser
   globals that modules touch at import time.
 - **Bots** (`agent.ts`) imagine a fan of candidate taps, double-taps and fly-holds
-  with a forward model of the game's physics (`forward.ts`), score them by their
-  persona, and perform the chosen one with aim, timing and judgement errors.
+  (including "fly up, then steer over") with a forward model of the game's
+  physics (`forward.ts`, which mirrors `moveAndCollide()` and shares the enemy
+  patrol code), score them by their persona — progress is measured along the
+  level's route via `src/nav.ts`, so they follow winding stages — and perform
+  the chosen one with aim, timing and judgement errors.
+- **Debugging a stage:** if bots keep failing somewhere, `trace --verbose`
+  prints each bot's position every 2 simulated seconds — a bot hopping in
+  place at the same spot means it can't find the way on from there.
 - **Personas** (`personas.ts`) — speedrunner, casual, collector, cautious,
   newbie — differ in hesitation, aim, greed, how well they understand the two
   meters, how often they fly or attack, and how often they fumble. Their
@@ -66,7 +72,20 @@ npm run sim               # full option list
   correction of the Holding Power drain plus a few random mutations, keeping
   the best; every candidate is scored on the same simulated players. A mild
   pull toward the starting values keeps knobs that don't matter from
-  drifting. The result is checked on fresh players before it's written.
+  drifting. A difficulty stops early once it has been on target for two
+  rounds; the drain is then calibrated on the check's own players. The result is checked on fresh players before it's written.
+
+## Trying ideas by hand
+
+`evaluate --stages stage2 --only hard --seed 1001 --set k=v,k=v` simulates a
+preset with some values changed, on the check's own players (seed 1001), and
+prints the headline numbers — handy for testing a hunch ("fewer beans?",
+"weaker banana?") in a minute or two. Once something lands on target, start a
+tune from it with `tune --stages stage2 --only hard --set k=v,k=v`, which
+validates it, calibrates the drain and writes the presets, report and baseline.
+That's how stage 2 Hard got on target: the drain alone couldn't do it (finishers
+who'd end nearly empty have an accident instead), but a weaker banana — the
+last refill before the toilet — plus fewer beans did.
 
 ## Calibrating against real players
 

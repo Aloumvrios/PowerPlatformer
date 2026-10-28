@@ -16,16 +16,29 @@ export interface PowerUp extends Rect {
   collected: boolean;
 }
 
-export interface Hazard extends Rect {}
+// Spikes. `dir` is the way they point (default "up", i.e. on a floor);
+// "down" hangs from a ceiling, "left"/"right" stick out of a wall.
+export interface Hazard extends Rect {
+  dir?: "up" | "down" | "left" | "right";
+}
 
 export interface Platform extends Rect {}
 
+// Patrols back and forth between minX and maxX — or, with axis "y",
+// up and down with minX/maxX meaning the top and bottom y.
 export interface Enemy extends Rect {
   minX: number;
   maxX: number;
   speed: number;
   dir: 1 | -1;
   alive: boolean;
+  axis?: "x" | "y";
+  kind?: "urchin" | "crawler"; // floating spiky ball (default) / ground crawler
+}
+
+// Non-colliding scenery drawn behind everything else.
+export interface Decor extends Rect {
+  kind: "hall" | "house" | "wc" | "door";
 }
 
 // Small collectible beans: each tops up a little Farting Power and counts
@@ -58,7 +71,8 @@ export interface Level {
   widthPx: number;
   heightPx: number;
   playerStart: { x: number; y: number };
-  platforms: Platform[];
+  platforms: Platform[]; // one-way: you jump up through them and land on top
+  solids: Rect[]; // solid terrain: walls, floors and ceilings you can't pass through
   hazards: Hazard[];
   powerUps: PowerUp[];
   enemies: Enemy[];
@@ -66,6 +80,7 @@ export interface Level {
   bananas: Banana[];
   checkpoints: Checkpoint[];
   hints: Hint[];
+  decor: Decor[];
   goal: Rect; // drawn as the toilet
 }
 

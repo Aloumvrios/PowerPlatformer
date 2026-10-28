@@ -1,4 +1,4 @@
-import type { Banana, Bean, Level, Stage } from "./types";
+import type { Banana, Bean, Level, Rect, Stage } from "./types";
 
 const BEAN_SIZE = 16;
 
@@ -93,6 +93,8 @@ export const level1: Level = {
     banana(1990, 255), // above the last high platform
   ],
 
+  solids: [],
+
   checkpoints: [{ x: 1120, y: 440, w: 26, h: 60, reached: false }],
 
   hints: [
@@ -105,10 +107,119 @@ export const level1: Level = {
     { x: 2150, y: 300, text: "nature calls →" },
   ],
 
+  decor: [],
+
   goal: { x: 2288, y: 380, w: 46, h: 60 },
+};
+
+// Stage 2 is built from a pen sketch on dotted paper (docs/sketches/stage2.jpg,
+// 1500x2000). The
+// coordinates below are the sketch's own pixels, so they can be checked
+// against the drawing; sk() scales them into the game.
+//
+// Route: start on the left pillar, jump the pit (an urchin bobs up and down
+// across the jump, another patrols the pit), checkpoint on the long block,
+// drop off its right end into a tunnel heading left, drop again into the
+// bottom tunnel heading right past a crawler, fart-fly up the shaft using the
+// small wall ledges (spikes on its walls), come out on top and run left
+// along the street to the toilet.
+const SK_SCALE = 0.9;
+const SK_TOP = 90; // the sketch's y where the level starts
+
+function sk(x1: number, y1: number, x2: number, y2: number): Rect {
+  const x = Math.round(x1 * SK_SCALE);
+  const y = Math.round((y1 - SK_TOP) * SK_SCALE);
+  return { x, y, w: Math.round(x2 * SK_SCALE) - x, h: Math.round((y2 - SK_TOP) * SK_SCALE) - y };
+}
+
+// Sketch-coordinate point → game coordinates.
+const skX = (x: number) => Math.round(x * SK_SCALE);
+const skY = (y: number) => Math.round((y - SK_TOP) * SK_SCALE);
+
+export const level2: Level = {
+  widthPx: skX(1500),
+  heightPx: skY(1950),
+  playerStart: { x: skX(100), y: skY(1350) - 44 },
+
+  platforms: [],
+
+  solids: [
+    sk(0, 90, 1500, 185), // top edge of the page
+    sk(1450, 185, 1500, 1950), // right wall
+    sk(0, 860, 1100, 955), // the street (top floor)
+    // The sloped bank between the street and the shaft, as three steps.
+    sk(1100, 805, 1150, 1620),
+    sk(1150, 890, 1200, 1620),
+    sk(1200, 975, 1250, 1620),
+    sk(0, 1350, 230, 1950), // start pillar
+    sk(230, 1780, 455, 1950), // pit floor
+    sk(455, 1345, 995, 1450), // checkpoint block
+    sk(455, 1450, 555, 1950), // ...and its left side, down to the bottom
+    sk(660, 1585, 1100, 1640), // floor of the upper tunnel
+    sk(555, 1790, 1450, 1950), // floor of the bottom tunnel and the shaft
+    // Shaft ledges, alternating walls, from the bottom up.
+    sk(1395, 1490, 1450, 1540),
+    sk(1250, 1390, 1305, 1435),
+    sk(1395, 1285, 1450, 1330),
+    sk(1250, 1180, 1305, 1225),
+    sk(1395, 1075, 1450, 1120),
+  ],
+
+  hazards: [
+    { ...sk(230, 1755, 455, 1780), dir: "up" }, // bottom of the pit
+    { ...sk(250, 955, 430, 982), dir: "down" }, // hanging under the street
+    { ...sk(1420, 1600, 1450, 1730), dir: "left" }, // shaft, right wall
+    { ...sk(1250, 1525, 1275, 1585), dir: "right" }, // shaft, left wall
+  ],
+
+  powerUps: [{ x: skX(1340) - 14, y: skY(1790) - 30, w: 28, h: 28, kind: "beansoup", collected: false }], // fuel for the climb
+
+  enemies: [
+    // Bobs up and down across the jump over the pit.
+    { x: skX(330), y: skY(1080), w: 30, h: 30, minX: skY(1080), maxX: skY(1330), speed: 70, dir: 1, alive: true, axis: "y" },
+    // Patrols the pit.
+    { x: skX(250), y: skY(1690), w: 30, h: 30, minX: skX(250), maxX: skX(420) - 30, speed: 60, dir: 1, alive: true },
+    // Crawls along the bottom tunnel.
+    { x: skX(600), y: skY(1790) - 28, w: 44, h: 28, minX: skX(600), maxX: skX(1180) - 44, speed: 70, dir: 1, alive: true, kind: "crawler" },
+  ],
+
+  beans: [
+    ...beans(skX(290), skY(1250), 3, 45, -8), // over the pit
+    ...beans(skX(560), skY(1345) - 20, 3, 40), // checkpoint block
+    ...beans(skX(760), skY(1585) - 20, 4, 50), // upper tunnel
+    ...beans(skX(620), skY(1790) - 20, 3, 40), // bottom tunnel
+    ...beans(skX(1280), skY(1390) - 20, 1), // shaft ledges
+    ...beans(skX(1420), skY(1285) - 20, 1),
+    ...beans(skX(330), skY(860) - 20, 4, 55), // the street
+  ],
+
+  bananas: [
+    banana(skX(1280), skY(1180) - 22), // on a shaft ledge
+    banana(skX(900), skY(860) - 60), // above the street
+  ],
+
+  checkpoints: [{ x: skX(640), y: skY(1345) - 60, w: 26, h: 60, reached: false }],
+
+  hints: [
+    { x: skX(70), y: skY(1150), text: "START" },
+    { x: skX(1000), y: skY(1690), text: "fly up →" },
+    { x: skX(70), y: skY(650), text: "END" },
+  ],
+
+  decor: [
+    { ...sk(55, 1210, 160, 1350), kind: "door" },
+    { ...sk(55, 380, 615, 860), kind: "hall" },
+    { ...sk(255, 590, 355, 860), kind: "wc" },
+    { ...sk(615, 350, 815, 860), kind: "house" },
+  ],
+
+  goal: { x: skX(80), y: skY(860) - 60, w: 46, h: 60 },
 };
 
 // Every stage, in play order. Adding one here is all the game needs; its
 // Easy/Medium/Hard values come from `npm run sim -- tune` (until then it
 // plays with DEFAULT_TUNING, and the difficulty check fails as "untuned").
-export const STAGES: Stage[] = [{ id: "stage1", name: "Stage 1", level: level1 }];
+export const STAGES: Stage[] = [
+  { id: "stage1", name: "Stage 1", level: level1 },
+  { id: "stage2", name: "Stage 2", level: level2 },
+];
