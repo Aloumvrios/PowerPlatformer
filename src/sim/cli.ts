@@ -17,8 +17,9 @@ export interface Io {
   runPopulation: StagePopulationRunner; // spread across worker threads
 }
 
-// The difficulty check and the tuner's final validation use the same
-// players, so a fresh tune always passes its own check.
+// The difficulty check, the tuner's final drain calibration and its final
+// validation all use the same players, so a tune that lands on target
+// passes its own check.
 const CHECK_SEED = 1001;
 const CHECK_SESSIONS = 1000;
 const BASELINE_PATH = "docs/difficulty-baseline.json";
@@ -209,6 +210,7 @@ const HELP = `Usage: npm run sim -- <command> [options]
               --sessions 1000
   trace     Print one line per simulated run, for eyeballing bot behaviour.
               --stage stage1 --difficulty medium --persona casual --runs 5
+              --verbose   also print the bot's position every 2 simulated seconds
 
   Common:   --seed 1    --pace 1 (scales bot hesitation; >1 = slower players.
                         Defaults to the pace saved in the baseline.)`;
@@ -252,7 +254,10 @@ export async function main(argv: string[], io: Io): Promise<number> {
         const start = isTuned(stage.id) ? results[d] : d === "medium" ? DEFAULT_TUNING : results.medium;
         const target = targetFor(stage.id, d);
         const r = await tune(start, start, target, { sessions, iterations, lambda: 5, seed, personas, regularize: 0.5 }, run, io.log);
-        results[d] = await calibrateDrain(r.tuning, target, CHECK_SESSIONS, seed + 500, personas, run, io.log);
+        // Calibrated on the check's own players: the check is the merge
+        // gate, and on a hard difficulty only a small share finish, so the
+        // median moves a few points between different samples of players.
+        results[d] = await calibrateDrain(r.tuning, target, CHECK_SESSIONS, CHECK_SEED, personas, run, io.log);
         io.log(`  ${stage.id} / ${d} done after ${r.evaluations} evaluations (${elapsed()})`);
       }
       const diff = (t: Tuning) =>
@@ -294,7 +299,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     const runs = Number(opts.runs ?? 3);
     for (const p of ps) {
       for (let i = 0; i < runs; i++) {
-        const s = runSession(presetFor(stageId, d), stageId, p, seed * 100003 + i);
+        const s = runSession(presetFor(stageId, d), stageId, p, seed * 100003 + i, opts.verbose ? io.log : undefined);
         s.attempts.forEach((a, n) =>
           io.log(
             `${p.name.padEnd(12)} #${i} try${n + 1} ${a.won ? "WON " : "lost"} ${a.time.toFixed(1).padStart(5)}s  holding ${a.finalHolding.toFixed(0).padStart(3)}  hops ${a.hops} jumps ${a.jumps} fly ${a.flightSec.toFixed(1)}s  beans ${a.beans} bananas ${a.bananas}  deaths ${a.deathLog.map((x) => `${x.cause}@${Math.round(x.x)}`).join(",") || "-"}`,

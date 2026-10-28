@@ -44,13 +44,21 @@ pushing to `main` ships.
 - `src/input.ts` — translates raw Pointer Events into the game's four discrete
   input primitives (click target, jump target, attack direction, fly target). See
   "Controls model" below. Game logic never touches `PointerEvent` directly.
-- `src/level.ts` — the hand-built levels (`level1` so far: platforms, hazards,
-  enemies, power-ups, beans, bananas, checkpoints, pencilled-on hints, and the
-  goal, drawn as a toilet) and `STAGES`, the ordered list of playable stages
-  (`{ id, name, level }`). No level editor or loader — edit the array literals
+- `src/level.ts` — the hand-built levels (`level1`, a left-to-right run, and
+  `level2`, a taller winding stage built from the user's pen sketch — its
+  coordinates are the sketch photo's pixels, scaled by `sk()`) and `STAGES`,
+  the ordered list of playable stages (`{ id, name, level }`). A level has
+  one-way `platforms`, solid `solids`, `hazards` (spikes; `dir` says which way
+  they point), `enemies` (urchins or crawlers, patrolling along x, or y with
+  `axis: "y"`), pickups, checkpoints, pencilled-on hints, background `decor`,
+  and the goal (drawn as a toilet). No level editor or loader — edit the array literals
   directly. Winning a stage moves on to the next (back to the first after the
   last). A stage's `id` keys its presets and saved best times, so keep it
   stable once shipped.
+- `src/nav.ts` — distance to the toilet *along the level* (a distance field
+  over the open space, spread from the goal), so progress through a winding
+  level is measured along its route. Drives the Holding Power ramp and the
+  bots' sense of progress. Solids block it; one-way platforms don't.
 - `src/sprites.ts` — imports every player sprite PNG, exposes `sprites: Record<SpriteName, HTMLImageElement>` and the `JUMP_SEQUENCE` animation order.
 - `src/tuning.ts` — the `Tuning` interface (every Farting Power / Holding Power
   rate and pickup value), `DEFAULT_TUNING`, and `presetFor(stageId, difficulty)`:
@@ -185,6 +193,16 @@ bots' forward model needs are exported from `game.ts`; if you change how
 movement works in `update()`/`moveAndCollide()`, mirror it in
 `src/sim/forward.ts`.
 
+## Camera
+
+Follows the player on both axes with smoothing, clamped to the level. x leads
+in the facing direction; y keeps the player in the lower part of the view. A
+level only scrolls vertically if it's taller than `VIEW_H`. Anything that
+converts between screen and level coordinates (click targets, ripples, the
+bots' taps) must use both `cameraX` and `cameraY`. The paper background's
+doodles (sun, clouds, hills) sit at the bottom of a tall level and slide out of
+view by parallax as the camera climbs.
+
 ## Game states (`src/game.ts`)
 
 `status` is one of `title → playing ⇄ paused`, `playing → dying → playing |
@@ -213,16 +231,18 @@ Order of operations matters and has bitten this project before:
 3. Resolve flight (`getFlyTarget()`), else resolve buffered weak-launch/jump
    requests, else apply gravity.
 4. Attack cooldown/flash decay, `consumeAttack()`.
-5. Integrate position, clamp to level bounds, run platform collision
-   (`moveAndCollide()`).
+5. Integrate position, clamp to level bounds, collide (`moveAndCollide()`):
+   x then y against solids, then one-way platforms.
 6. Hazards, enemies, pickups/beans/bananas/checkpoints, goal, Holding Power
    "accident" (after pickups and the goal, so a last-second banana or reaching
    the toilet that frame still saves you), fall-death.
-7. Track `furthestX`, idle toots, low-Holding-Power rumbles, squash/stretch easing, smoothed look-ahead camera, flight-jet
+7. Track `bestProgress`, idle toots, low-Holding-Power rumbles, squash/stretch easing, smoothed look-ahead camera, flight-jet
    sound.
 
-**Platforms are one-way** (including the ground): you rise through them from
-below or the side and only land from above. Landing compares against *last
+**Two kinds of terrain.** **Solids** block from every side (walls, floors,
+ceilings — a jump or flight bonks off them); movement is resolved one axis at a
+time, x first, then y. **Platforms are one-way** (including stage 1's ground):
+you rise through them from below or the side and only land from above. Landing compares against *last
 frame's* feet position, so fast falls can't tunnel through 20px platforms. On
 the ground, leftover horizontal speed bleeds off via `GROUND_FRICTION` (a short
 skid shown with the `run1`/`run2` frames) instead of stopping dead.
@@ -256,8 +276,9 @@ these two orderings.
 A second 0–100 meter: how much longer the hero can hold it in. It drains on its
 own at `tuning.holdingDrainPerSec × holdingDrainMult()`, where the multiplier ramps
 (eased in, `progress²`) from 1 up to `1 + tuning.holdingProgressExtra` as the player
-nears the toilet. Progress uses `furthestX` — the furthest the player has got
-this life — **not** the current position, so walking back doesn't buy time;
+nears the toilet. Progress is `bestProgress` — the furthest the player has got
+this life, measured along the route by `nav.ts` (0 at the start, 1 at the
+toilet) — **not** the current position, so walking back doesn't buy time;
 it's reset to the spawn point on each (re)spawn.
 
 The trade-off with Farting Power: anything that refuels gas drains Holding Power

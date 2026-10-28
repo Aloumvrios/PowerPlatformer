@@ -91,7 +91,16 @@ export async function tune(
   const fmt = (r: typeof best) =>
     `loss ${r.loss.toFixed(3)}  finish ${(r.summary.finishRate * 100).toFixed(0)}%  holding ${r.summary.holdingMedian?.toFixed(1) ?? "—"}  drain ${r.tuning.holdingDrainPerSec}`;
   log(`  start: ${fmt(best)}`);
+  const onTarget = (sm: Summary) =>
+    sm.holdingMedian !== null && bandDist(sm.holdingMedian, target.holding) === 0 && bandDist(sm.finishRate, target.finishRate) === 0;
+  let onTargetRounds = onTarget(best.summary) ? 1 : 0;
   for (let it = 0; it < opts.iterations; it++) {
+    // Already on target for a couple of rounds: further rounds would only
+    // shave the pull-toward-the-start term, which isn't worth the time.
+    if (onTargetRounds >= 2) {
+      log(`  on target; stopping early`);
+      break;
+    }
     const sigma = 0.25 * (1 - it / opts.iterations) + 0.04;
     const candidates: Tuning[] = [];
     const corrected = drainCorrection(best.tuning, best.summary, target);
@@ -103,6 +112,7 @@ export async function tune(
       if (r.loss < best.loss) best = r;
     }
     log(`  round ${it + 1}/${opts.iterations}: ${fmt(best)}`);
+    onTargetRounds = onTarget(best.summary) ? onTargetRounds + 1 : 0;
   }
   return { ...best, evaluations };
 }

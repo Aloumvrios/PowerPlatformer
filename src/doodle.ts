@@ -5,7 +5,7 @@
 // a deliberate "line boil": the seed cycles through 3 variations a few times
 // a second (setBoil), the classic hand-animated look where outlines shimmer.
 
-import type { Checkpoint, Enemy, PickupKind, Rect } from "./types";
+import type { Checkpoint, Decor, Enemy, Hazard, PickupKind, Rect } from "./types";
 import { VIEW_H, VIEW_W } from "./view";
 
 export const INK = "#26262e";
@@ -140,15 +140,18 @@ export function hatch(
 // --- background ----------------------------------------------------------
 
 // Lined notebook paper filling the view, plus a margin line and faint
-// pencil doodles (sun, clouds, hills) on two parallax layers.
-export function drawPaper(ctx: CanvasRenderingContext2D, cameraX: number, levelW: number): void {
+// pencil doodles (sun, clouds, hills) on two parallax layers. In a level
+// taller than the view, the doodles sit at the bottom of the level and
+// slide down out of sight (by parallax) as the camera climbs.
+export function drawPaper(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, levelW: number, levelH: number): void {
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
   ctx.strokeStyle = PAPER_LINE;
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.55;
-  for (let y = 72; y < VIEW_H; y += 30) {
+  const firstLine = 72 - cameraY > 0 ? 72 - cameraY : (((72 - cameraY) % 30) + 30) % 30;
+  for (let y = firstLine; y < VIEW_H; y += 30) {
     ctx.beginPath();
     ctx.moveTo(0, y + 0.5);
     ctx.lineTo(VIEW_W, y + 0.5);
@@ -171,6 +174,8 @@ export function drawPaper(ctx: CanvasRenderingContext2D, cameraX: number, levelW
   ctx.strokeStyle = INK;
   ctx.lineWidth = 1.4;
   ctx.globalAlpha = 0.22;
+  const above = Math.max(0, levelH - VIEW_H - cameraY); // how far the camera is above the level's bottom
+  ctx.translate(0, above * 0.04);
 
   // Sun, barely moving.
   const sunX = 820 - cameraX * 0.04;
@@ -181,12 +186,14 @@ export function drawPaper(ctx: CanvasRenderingContext2D, cameraX: number, levelW
   }
 
   // Far layer: clouds.
+  ctx.translate(0, above * 0.21);
   drawParallaxLayer(cameraX, 0.25, levelW, 360, (x, seed) => {
     const r = stableRng(seed);
     drawCloud(ctx, x, 70 + r() * 90, 0.7 + r() * 0.5, seed);
   });
 
   // Near layer: rolling hills with a few trees.
+  ctx.translate(0, above * 0.25);
   drawParallaxLayer(cameraX, 0.5, levelW, 300, (x, seed) => {
     const r = stableRng(seed);
     const h = 60 + r() * 60;
@@ -259,25 +266,147 @@ export function drawPlatform(ctx: CanvasRenderingContext2D, r: Rect, seed: numbe
   ctx.restore();
 }
 
-export function drawSpikes(ctx: CanvasRenderingContext2D, r: Rect, seed: number): void {
+// A row of spikes filling `r`, pointing `dir` (up from a floor, down from
+// a ceiling, or sideways out of a wall).
+export function drawSpikes(ctx: CanvasRenderingContext2D, r: Rect, seed: number, dir: Hazard["dir"] = "up"): void {
   ctx.save();
-  const n = Math.max(2, Math.round(r.w / 15));
-  const w = r.w / n;
+  const vertical = dir === "up" || dir === "down";
+  const len = vertical ? r.w : r.h;
+  const n = Math.max(2, Math.round(len / 15));
+  const w = len / n;
   ctx.strokeStyle = "#c62f2f";
   ctx.lineWidth = 2;
   ctx.fillStyle = "rgba(226, 59, 59, 0.28)";
   for (let i = 0; i < n; i++) {
-    const x0 = r.x + i * w;
+    const a0 = i * w;
     const rr = rng(seed + i);
-    const tipX = x0 + w / 2 + (rr() - 0.5) * 2;
-    const tipY = r.y - 4 + (rr() - 0.5) * 2;
+    const along = a0 + w / 2 + (rr() - 0.5) * 2;
+    const wob = (rr() - 0.5) * 2;
+    // [base corner 1, tip, base corner 2] in level coordinates.
+    let pts: [number, number][];
+    switch (dir) {
+      case "down":
+        pts = [[r.x + a0, r.y], [r.x + along, r.y + r.h + 4 + wob], [r.x + a0 + w, r.y]];
+        break;
+      case "left":
+        pts = [[r.x + r.w, r.y + a0], [r.x - 4 + wob, r.y + along], [r.x + r.w, r.y + a0 + w]];
+        break;
+      case "right":
+        pts = [[r.x, r.y + a0], [r.x + r.w + 4 + wob, r.y + along], [r.x, r.y + a0 + w]];
+        break;
+      default:
+        pts = [[r.x + a0, r.y + r.h], [r.x + along, r.y - 4 + wob], [r.x + a0 + w, r.y + r.h]];
+    }
     ctx.beginPath();
-    ctx.moveTo(x0, r.y + r.h);
-    ctx.lineTo(tipX, tipY);
-    ctx.lineTo(x0 + w, r.y + r.h);
+    ctx.moveTo(...pts[0]);
+    ctx.lineTo(...pts[1]);
+    ctx.lineTo(...pts[2]);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Solid terrain: a block shaded with dense diagonal pencil hatching, like
+// the hatched ground in a level sketch. Long edges are drawn in short
+// segments so the wobble stays local.
+export function drawSolid(ctx: CanvasRenderingContext2D, r: Rect, seed: number): void {
+  ctx.save();
+  ctx.fillStyle = "#ece2c8";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  hatch(ctx, r, seed, INK, 13, 0.32);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  const edge = (x0: number, y0: number, x1: number, y1: number, s: number) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 120));
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps;
+      const t1 = (i + 1) / steps;
+      sketchLine(ctx, x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0, x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1, s + i, 0.9);
+    }
+  };
+  edge(r.x, r.y, r.x + r.w, r.y, seed + 1);
+  edge(r.x + r.w, r.y, r.x + r.w, r.y + r.h, seed + 50);
+  edge(r.x + r.w, r.y + r.h, r.x, r.y + r.h, seed + 100);
+  edge(r.x, r.y + r.h, r.x, r.y, seed + 150);
+  ctx.restore();
+}
+
+// Background scenery: pencil buildings and doors. Purely decorative.
+export function drawDecor(ctx: CanvasRenderingContext2D, d: Decor, seed: number): void {
+  const { x, y, w, h } = d;
+  ctx.save();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = "rgba(251, 247, 234, 0.9)";
+  const knob = (kx: number, ky: number, r: number) => {
+    ctx.beginPath();
+    ctx.arc(kx, ky, r, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+  switch (d.kind) {
+    case "hall": {
+      // A long building whose roof is rows of scalloped tiles.
+      ctx.fillRect(x, y, w, h);
+      sketchRect(ctx, d, seed, 1);
+      const rows = 3;
+      const roofH = h * 0.45;
+      for (let row = 0; row < rows; row++) {
+        const ry = y + ((row + 1) * roofH) / rows;
+        sketchLine(ctx, x, ry, x + w, ry, seed + 10 + row, 0.8);
+        const n = Math.max(3, Math.round(w / 55));
+        const aw = w / n;
+        for (let i = 0; i < n; i++) {
+          ctx.beginPath();
+          ctx.arc(x + aw * (i + 0.5), ry, aw / 2, Math.PI, 0);
+          ctx.stroke();
+        }
+      }
+      break;
+    }
+    case "house": {
+      // Pitched roof on a box, with a door.
+      const roofH = h * 0.32;
+      ctx.beginPath();
+      ctx.moveTo(x, y + roofH);
+      ctx.lineTo(x + w / 2, y);
+      ctx.lineTo(x + w, y + roofH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      const body: Rect = { x: x + w * 0.04, y: y + roofH, w: w * 0.92, h: h - roofH };
+      ctx.fillRect(body.x, body.y, body.w, body.h);
+      sketchRect(ctx, body, seed, 1);
+      const door: Rect = { x: x + w * 0.45, y: y + h * 0.66, w: w * 0.3, h: h * 0.34 };
+      sketchRect(ctx, door, seed + 5, 0.8);
+      knob(door.x + door.w * 0.25, door.y + door.h * 0.5, 3);
+      break;
+    }
+    case "wc": {
+      // A tall narrow door marked WC.
+      ctx.fillRect(x, y, w, h);
+      sketchRect(ctx, d, seed, 1);
+      sketchRect(ctx, { x: x + w * 0.15, y: y + h * 0.04, w: w * 0.7, h: h * 0.96 }, seed + 3, 0.8);
+      ctx.globalAlpha = 1;
+      handText(ctx, "WC", x + w / 2, y + h * 0.18, Math.min(26, w * 0.45), INK, { font: MARKER_FONT });
+      ctx.globalAlpha = 0.75;
+      knob(x + w * 0.3, y + h * 0.62, 4);
+      break;
+    }
+    case "door": {
+      // An open door frame with an arrow pointing out of it: the way in.
+      sketchLine(ctx, x, y + h, x, y, seed, 0.8);
+      sketchLine(ctx, x, y, x + w * 0.6, y, seed + 1, 0.8);
+      sketchLine(ctx, x + w * 0.6, y, x + w * 0.6, y + h, seed + 2, 0.8);
+      ctx.lineWidth = 2;
+      const ay = y + h * 0.55;
+      sketchLine(ctx, x + w * 0.1, ay, x + w, ay, seed + 3, 0.6);
+      sketchLine(ctx, x + w, ay, x + w - 10, ay - 7, seed + 4, 0.4);
+      sketchLine(ctx, x + w, ay, x + w - 10, ay + 7, seed + 5, 0.4);
+      break;
+    }
   }
   ctx.restore();
 }
@@ -623,6 +752,10 @@ export function drawEnemy(
   seed: number,
   squash = 0,
 ): void {
+  if (enemy.kind === "crawler") {
+    drawCrawler(ctx, enemy, t, lookX, lookY, seed, squash);
+    return;
+  }
   const cx = enemy.x + enemy.w / 2;
   const bob = Math.sin(t * 4 + enemy.x * 0.05) * 3 * (1 - squash);
   const cy = enemy.y + enemy.h / 2 + bob + squash * enemy.h * 0.3;
@@ -673,6 +806,61 @@ export function drawEnemy(
   ctx.lineWidth = 1.8;
   sketchLine(ctx, -r * 0.48, -r * 0.4, -r * 0.1, -r * 0.28, seed + 1, 0.4);
   sketchLine(ctx, r * 0.48, -r * 0.4, r * 0.1, -r * 0.28, seed + 2, 0.4);
+  ctx.restore();
+}
+
+// A dark dome on scuttling legs that walks along the floor; eyes follow the player.
+function drawCrawler(
+  ctx: CanvasRenderingContext2D,
+  enemy: Enemy,
+  t: number,
+  lookX: number,
+  lookY: number,
+  seed: number,
+  squash: number,
+): void {
+  const cx = enemy.x + enemy.w / 2;
+  const base = enemy.y + enemy.h;
+  const r = enemy.w / 2;
+  ctx.save();
+  ctx.translate(cx, base);
+  ctx.scale(1 + squash * 0.5, 1 - squash * 0.6);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  // Legs: three a side, stepping.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const phase = Math.sin(t * 14 + i * 2.1 + (side > 0 ? 1 : 0)) * 3;
+      const hipX = side * r * (0.35 + i * 0.2);
+      const kneeX = side * r * (0.75 + i * 0.25);
+      const footX = side * r * (0.95 + i * 0.22) + phase;
+      sketchLine(ctx, hipX, -enemy.h * 0.35, kneeX, -enemy.h * 0.85, seed + i + side * 7, 0.3);
+      sketchLine(ctx, kneeX, -enemy.h * 0.85, footX, 0, seed + i + side * 9, 0.3);
+    }
+  }
+  // Body
+  ctx.fillStyle = "#3a3540";
+  ctx.beginPath();
+  ctx.ellipse(0, -enemy.h * 0.4, r * 0.8, enemy.h * 0.55, 0, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Eyes
+  const ey = -enemy.h * 0.55;
+  const look = Math.atan2(lookY - (base + ey), lookX - cx);
+  for (const ex of [-0.3, 0.3]) {
+    ctx.fillStyle = "#fff";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(ex * r, ey, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(ex * r + Math.cos(look) * r * 0.08, ey + Math.sin(look) * r * 0.08, r * 0.09, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 

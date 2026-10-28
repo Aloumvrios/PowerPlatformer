@@ -1,5 +1,6 @@
 import { getPressIndicator, pointerInput, setUiButtons, type InputSource, type UiButton } from "./input";
 import { STAGES } from "./level";
+import { routeProgress } from "./nav";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
 import { isMuted, setFlying, sfx, toggleMute } from "./audio";
 import {
@@ -12,10 +13,12 @@ import {
   drawCheckpoint,
   drawEnemy,
   drawHeart,
+  drawDecor,
   drawPaper,
   drawPickupIcon,
   drawPlatform,
   drawPuffIcon,
+  drawSolid,
   drawSpikes,
   drawToilet,
   drawWing,
@@ -63,7 +66,7 @@ export const FLY_HOLD_VY_SPEED = 260; // px/s, constant ascend while held
 export const FLY_HOLD_VX_SPEED = 300; // px/s, horizontal steer toward the pointer's side
 export const FLY_HOLD_DEADZONE_PX = 10; // px; pointer within this of the player's x -> go straight up
 
-export const FLY_MIN_Y = 10; // keep the player from flying above the (unscrolled) top of the view
+export const FLY_MIN_Y = 10; // keep the player from flying off the top of the level
 
 const POWER_DURATIONS: Record<PowerKind, number> = {
   speed: 6,
@@ -136,6 +139,22 @@ interface Particle {
   drag: number;
   seed: number;
   text?: string;
+}
+
+// One frame of an enemy's patrol: along x (or y, for axis "y") between
+// minX and maxX, turning at either end. Shared with the bots' forward model.
+export function stepEnemy(e: Enemy, dt: number): void {
+  const vertical = e.axis === "y";
+  let pos = (vertical ? e.y : e.x) + e.speed * e.dir * dt;
+  if (pos <= e.minX) {
+    pos = e.minX;
+    e.dir = 1;
+  } else if (pos >= e.maxX) {
+    pos = e.maxX;
+    e.dir = -1;
+  }
+  if (vertical) e.y = pos;
+  else e.x = pos;
 }
 
 function intersects(a: Rect, b: Rect): boolean {
@@ -226,6 +245,7 @@ export class Game {
   private level: Level = STAGES[0].level;
   private player!: Player;
   private cameraX = 0;
+  private cameraY = 0;
   private camLead = 0;
   private lives = MAX_LIVES;
   private activePowers = new Map<PowerKind, ActivePower>();
@@ -247,9 +267,10 @@ export class Game {
   private fartingPower = FARTING_MAX;
   private holdingPower = HOLDING_MAX;
   private holdingAtCheckpoint = HOLDING_MAX;
-  // Furthest the player's centre has got toward the toilet this life;
-  // drives the holding drain, so backtracking doesn't buy time.
-  private furthestX = 0;
+  // Furthest the player has got toward the toilet this life, 0..1 along
+  // the level's route (see nav.ts); drives the holding drain, so
+  // backtracking doesn't buy time.
+  private bestProgress = 0;
   private rumbleTimer = 0;
   private attackCooldown = 0;
   private attackFlash = 0;
@@ -328,8 +349,8 @@ export class Game {
   get playerState(): Readonly<Player> {
     return this.player;
   }
-  get camera(): number {
-    return this.cameraX;
+  get camera(): { x: number; y: number } {
+    return { x: this.cameraX, y: this.cameraY };
   }
   get farting(): number {
     return this.fartingPower;
@@ -358,7 +379,7 @@ export class Game {
       enemiesFarted: this.enemiesFarted,
       holding: this.holdingPower,
       farting: this.fartingPower,
-      furthestX: this.furthestX,
+      progress: this.bestProgress,
       lastDeathCause: this.dyingCause,
       ...this.stats,
     };
@@ -385,7 +406,8 @@ export class Game {
     for (const e of this.level.enemies) {
       e.alive = true;
       e.dir = 1;
-      e.x = e.minX;
+      if (e.axis === "y") e.y = e.minX;
+      else e.x = e.minX;
     }
     this.deadEnemies = [];
     this.particles = [];
@@ -427,8 +449,9 @@ export class Game {
     this.squashX = 1;
     this.squashY = 1;
     this.camLead = 0;
-    this.furthestX = this.player.x + this.player.w / 2;
+    this.bestProgress = this.progressNow();
     this.cameraX = this.clampCamera(this.player.x + this.player.w / 2 - VIEW_W / 2);
+    this.cameraY = this.clampCameraY(this.camYTarget());
   }
 
   start(): void {
@@ -499,6 +522,21 @@ export class Game {
 
   private clampCamera(x: number): number {
     return Math.max(0, Math.min(x, this.level.widthPx - VIEW_W));
+  }
+
+  private clampCameraY(y: number): number {
+    return Math.max(0, Math.min(y, this.level.heightPx - VIEW_H));
+  }
+
+  // Keep the player in the lower part of the view, so more of what's above
+  // (the way up, the scenery) is visible.
+  private camYTarget(): number {
+    return this.player.y + this.player.h / 2 - VIEW_H * 0.62;
+  }
+
+  private progressNow(): number {
+    const p = this.player;
+    return routeProgress(this.level, p.x + p.w / 2, p.y + p.h / 2);
   }
 
   // Where fart effects come out: low and behind the player, relative to
@@ -588,7 +626,7 @@ export class Game {
       const clickTarget = this.input.consumeClickTarget();
       if (clickTarget !== null) {
         const screenX = p.x + p.w / 2 - this.cameraX;
-        const screenY = p.y + p.h / 2;
+        const screenY = p.y + p.h / 2 - this.cameraY;
         const dx = clickTarget.x - screenX;
         const dy = clickTarget.y - screenY;
         const dist = Math.hypot(dx, dy);
@@ -600,7 +638,7 @@ export class Game {
           this.weakDirY = dy / dist;
         }
         this.weakLaunchBuffer = LAUNCH_BUFFER_SEC;
-        this.ripple(clickTarget.x + this.cameraX, clickTarget.y, 16);
+        this.ripple(clickTarget.x + this.cameraX, clickTarget.y + this.cameraY, 16);
       }
       if (this.weakLaunchBuffer > 0) {
         if (p.onGround || poweredFly) {
@@ -630,7 +668,7 @@ export class Game {
       const jumpTarget = this.input.consumeJump();
       if (jumpTarget !== null) {
         const screenX = p.x + p.w / 2 - this.cameraX;
-        const screenY = p.y + p.h / 2;
+        const screenY = p.y + p.h / 2 - this.cameraY;
         const dx = jumpTarget.x - screenX;
         const dy = jumpTarget.y - screenY;
         const dist = Math.hypot(dx, dy);
@@ -642,7 +680,7 @@ export class Game {
           this.jumpDirY = dy / dist;
         }
         this.jumpBuffer = LAUNCH_BUFFER_SEC;
-        this.ripple(jumpTarget.x + this.cameraX, jumpTarget.y, 26);
+        this.ripple(jumpTarget.x + this.cameraX, jumpTarget.y + this.cameraY, 26);
       }
       if (this.jumpBuffer > 0) {
         if (p.onGround || poweredFly) {
@@ -720,14 +758,7 @@ export class Game {
 
     for (const enemy of this.level.enemies) {
       if (!enemy.alive) continue;
-      enemy.x += enemy.speed * enemy.dir * dt;
-      if (enemy.x <= enemy.minX) {
-        enemy.x = enemy.minX;
-        enemy.dir = 1;
-      } else if (enemy.x >= enemy.maxX) {
-        enemy.x = enemy.maxX;
-        enemy.dir = -1;
-      }
+      stepEnemy(enemy, dt);
       if (this.status === "playing" && this.invuln <= 0 && intersects(p, enemy)) {
         this.handleContactDamage(enemy.x + enemy.w / 2);
       }
@@ -751,7 +782,7 @@ export class Game {
       this.die("fall");
     }
 
-    this.furthestX = Math.max(this.furthestX, p.x + p.w / 2);
+    this.bestProgress = Math.max(this.bestProgress, this.progressNow());
     this.updateIdle(dt);
     this.updateRumble(dt);
     this.updateSquash(dt);
@@ -760,30 +791,50 @@ export class Game {
     this.camLead += (lead - this.camLead) * Math.min(1, dt * 2.5);
     const camTarget = this.clampCamera(p.x + p.w / 2 - VIEW_W / 2 + this.camLead);
     this.cameraX += (camTarget - this.cameraX) * Math.min(1, dt * 7);
+    this.cameraY += (this.clampCameraY(this.camYTarget()) - this.cameraY) * Math.min(1, dt * 6);
 
     setFlying(this.isHoldFlying && this.status === "playing", this.fartingPower < FARTING_LOW);
   }
 
-  // Floating platforms (and the ground) are one-way: you can rise up
-  // through them from below or the side, and only land on them from
-  // above. Landing is checked against last frame's feet position, so a
-  // fast fall can't tunnel through a thin platform between frames.
+  // Two kinds of terrain. Solids (walls, floors, ceilings) block from every
+  // side: movement is resolved one axis at a time, x first, then y, so
+  // running into a wall and landing on a floor never get mixed up.
+  // Platforms are one-way: you can rise up through them from below or the
+  // side, and only land on them from above. Landing is checked against
+  // last frame's feet position, so a fast fall can't tunnel through a thin
+  // platform between frames. src/sim/forward.ts mirrors this exactly.
   private moveAndCollide(dt: number, poweredFly: boolean): void {
     const p = this.player;
     const prevBottom = p.y + p.h;
     const impactVy = p.vy;
     p.x += p.vx * dt;
-    p.y += p.vy * dt;
     if (p.x < 0 || p.x > this.level.widthPx - p.w) {
       p.x = Math.max(0, Math.min(p.x, this.level.widthPx - p.w));
       p.vx = 0;
     }
+    for (const s of this.level.solids) {
+      if (p.vx === 0 || !intersects(p, s)) continue;
+      p.x = p.vx > 0 ? s.x - p.w : s.x + s.w;
+      p.vx = 0;
+    }
+
+    p.y += p.vy * dt;
     if (poweredFly || this.isHoldFlying) {
       p.y = Math.max(FLY_MIN_Y, p.y);
     }
-
     p.onGround = false;
-    if (p.vy >= 0) {
+    for (const s of this.level.solids) {
+      if (p.vy === 0 || !intersects(p, s)) continue;
+      if (p.vy > 0) {
+        p.y = s.y - p.h;
+        p.onGround = true;
+      } else {
+        p.y = s.y + s.h; // bonk
+      }
+      p.vy = 0;
+    }
+
+    if (!p.onGround && p.vy >= 0) {
       let landY = Infinity;
       for (const platform of this.level.platforms) {
         const overlapsX = p.x + p.w > platform.x && p.x < platform.x + platform.w;
@@ -920,10 +971,7 @@ export class Game {
   // 1 at the start, ramping up (eased in, so the last stretch is the
   // frantic part) to 1 + holdingProgressExtra at the toilet.
   private holdingDrainMult(): number {
-    const start = this.level.playerStart.x;
-    const end = this.level.goal.x;
-    const progress = Math.max(0, Math.min(1, (this.furthestX - start) / (end - start)));
-    return 1 + this.tuning.holdingProgressExtra * progress * progress;
+    return 1 + this.tuning.holdingProgressExtra * this.bestProgress * this.bestProgress;
   }
 
   // 0 while Holding Power is comfortable, rising to 1 as it runs out.
@@ -1374,10 +1422,17 @@ export class Game {
     ctx.imageSmoothingQuality = "high";
 
     const cameraX = this.status === "title" ? 0 : this.cameraX;
-    drawPaper(ctx, cameraX, level.widthPx);
+    const cameraY = this.status === "title" ? this.clampCameraY(level.playerStart.y - VIEW_H * 0.62) : this.cameraY;
+    drawPaper(ctx, cameraX, cameraY, level.widthPx, level.heightPx);
 
     ctx.save();
-    ctx.translate(-cameraX, 0);
+    ctx.translate(-cameraX, -cameraY);
+    const onScreen = (r: Rect, pad = 0) =>
+      r.x - pad < cameraX + VIEW_W && r.x + r.w + pad > cameraX && r.y - pad < cameraY + VIEW_H && r.y + r.h + pad > cameraY;
+
+    level.decor.forEach((d, i) => {
+      if (onScreen(d, 40)) drawDecor(ctx, d, 1700 + i * 9);
+    });
 
     for (const hint of level.hints) {
       if (hint.x > cameraX + VIEW_W || hint.x + 400 < cameraX) continue;
@@ -1388,10 +1443,13 @@ export class Game {
     }
 
     level.platforms.forEach((platform, i) => {
-      if (platform.x > cameraX + VIEW_W || platform.x + platform.w < cameraX) return;
+      if (!onScreen(platform, 10)) return;
       drawPlatform(ctx, platform, i * 17 + 3, i === 0);
     });
-    level.hazards.forEach((hazard, i) => drawSpikes(ctx, hazard, 300 + i * 13));
+    level.solids.forEach((solid, i) => {
+      if (onScreen(solid, 4)) drawSolid(ctx, solid, 1100 + i * 23);
+    });
+    level.hazards.forEach((hazard, i) => drawSpikes(ctx, hazard, 300 + i * 13, hazard.dir));
     level.checkpoints.forEach((cp, i) =>
       drawCheckpoint(ctx, cp, this.elapsed, cp.reached ? easeOutBack(this.checkpointRaise[i]) : 0),
     );
