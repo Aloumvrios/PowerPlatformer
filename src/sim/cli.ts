@@ -74,6 +74,17 @@ function pickDifficulties(opt: string | undefined): Difficulty[] {
   return ds;
 }
 
+// --set beanShare=0.5,holdingDrainPerSec=1.6: values to try on top of the presets.
+function parseSet(opt: string | undefined): Partial<Tuning> {
+  const overrides: Partial<Tuning> = {};
+  for (const kv of opt?.split(",") ?? []) {
+    const [k, v] = kv.split("=");
+    if (!(k in DEFAULT_TUNING) || v === undefined || isNaN(Number(v))) throw new Error(`bad --set "${kv}"`);
+    overrides[k as keyof Tuning] = Number(v);
+  }
+  return overrides;
+}
+
 const label = (d: string) => d[0].toUpperCase() + d.slice(1);
 
 async function entry(
@@ -205,9 +216,12 @@ const HELP = `Usage: npm run sim -- <command> [options]
               --only easy,hard         just these difficulties (others keep their values)
               --sessions 500           simulated players per candidate
               --iterations 10          search rounds per difficulty
+              --set k=v,k=v            start the search from these values (e.g. found with evaluate --set)
   evaluate  Simulate every stage with its presets and the default values, and
             write sim-out/report.md + report.json.
               --sessions 1000
+              --stages stage2 --only hard   just these
+              --set beanShare=0.5,holdingDrainPerSec=1.6   try values on top of the presets
   trace     Print one line per simulated run, for eyeballing bot behaviour.
               --stage stage1 --difficulty medium --persona casual --runs 5
               --verbose   also print the bot's position every 2 simulated seconds
@@ -251,7 +265,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const order = (["medium", "easy", "hard"] as Difficulty[]).filter((d) => only.includes(d));
       for (const d of order) {
         io.log(`Tuning ${stage.id} / ${d}…`);
-        const start = isTuned(stage.id) ? results[d] : d === "medium" ? DEFAULT_TUNING : results.medium;
+        const start = { ...(isTuned(stage.id) ? results[d] : d === "medium" ? DEFAULT_TUNING : results.medium), ...parseSet(opts.set) };
         const target = targetFor(stage.id, d);
         const r = await tune(start, start, target, { sessions, iterations, lambda: 5, seed, personas, regularize: 0.5 }, run, io.log);
         // Calibrated on the check's own players: the check is the merge
@@ -277,11 +291,17 @@ export async function main(argv: string[], io: Io): Promise<number> {
 
   if (cmd === "evaluate") {
     const sessions = Number(opts.sessions ?? 1000);
+    const overrides = parseSet(opts.set);
+    const only = pickDifficulties(opts.only);
     const stages: ReportStage[] = [];
     const json: Record<string, ReportEntry[]> = {};
-    for (const stage of STAGES) {
-      const entries = [await entry(io, stage.id, "default", DEFAULT_TUNING, sessions, seed, personas)];
-      for (const d of DIFFICULTIES) entries.push(await entry(io, stage.id, d, presetFor(stage.id, d), sessions, seed, personas, d));
+    for (const stage of pickStages(opts.stages)) {
+      const entries = opts.only ? [] : [await entry(io, stage.id, "default", DEFAULT_TUNING, sessions, seed, personas)];
+      for (const d of only) entries.push(await entry(io, stage.id, d, { ...presetFor(stage.id, d), ...overrides }, sessions, seed, personas, d));
+      for (const e of entries)
+        io.log(
+          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s`,
+        );
       stages.push({ title: `${stage.name} (\`${stage.id}\`)`, entries });
       json[stage.id] = entries;
     }

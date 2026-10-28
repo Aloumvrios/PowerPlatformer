@@ -38,10 +38,10 @@
         "livesLost": 1.76
       },
       "hard": {
-        "finishRate": 0.263,
-        "holdingMedian": 16.8,
-        "timeMedian": 49,
-        "livesLost": 2.46
+        "finishRate": 0.191,
+        "holdingMedian": 13.8,
+        "timeMedian": 40,
+        "livesLost": 2.59
       }
     }
   }

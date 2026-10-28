@@ -1,7 +1,7 @@
 # Difficulty tuning
 
 - **generated:** 2026-10-28
-- **command:** npm run sim -- tune --stages stage1 --only hard --sessions 500 --iterations 6
+- **command:** npm run sim -- tune --stages stage2 --only hard --sessions 300 --iterations 6 --set holdingBanana=5,beanShare=0.6,holdingDrainPerSec=1.45
 - **players per stage and difficulty:** 1000
 - **pace:** 1
 
@@ -44,6 +44,7 @@ Bold = changed from the default.
 | `fartingFlyCostPerSec` | 15 | 15 | 15 | **15.9** |
 | `beanFarting` | 5 | 5 | 5 | **7.59** |
 | `bananaFartingCost` | 10 | 10 | 10 | **6.92** |
+| `beanShare` | 1 | 1 | 1 | 1 |
 | `holdingDrainPerSec` | 1.1 | **0.7** | **4.84** | **6** |
 | `holdingProgressExtra` | 1.5 | 1.5 | 1.5 | **3** |
 | `holdingBeanCost` | 1 | 1 | 1 | **0.71** |
@@ -93,22 +94,22 @@ Where first-attempt deaths happen (level x): 0-200: 8, 200-400: 8, 400-600: 13, 
 
 | | easy | medium | hard |
 |---|---|---|---|
-| Finish rate (first attempt) | 84% ✅ (80%–100%) | 58% ✅ (50%–70%) | 26% ✅ (15%–40%) |
-| Final Holding Power, median | 85.7 ✅ (80–100) | 26.7 ✅ (25–40) | 16.8 ❌ (10–15) |
-| Final Holding Power, p25–p75 | 77.6–92.5 | 14.8–43.4 | 7.6–30.5 |
+| Finish rate (first attempt) | 84% ✅ (80%–100%) | 58% ✅ (50%–70%) | 19% ✅ (15%–40%) |
+| Final Holding Power, median | 85.7 ✅ (80–100) | 26.7 ✅ (25–40) | 13.8 ✅ (10–15) |
+| Final Holding Power, p25–p75 | 77.6–92.5 | 14.8–43.4 | 5.1–24.1 |
 | Players finishing with Holding > 80 | 58% | 0% | 0% |
-| Finish within 3 attempts | 98% | 84% | 45% |
-| Attempts needed (eventual finishers) | 1.17 | 1.40 | 1.58 |
-| Lives lost per first attempt | 1.02 | 1.76 | 2.46 |
-| Time to finish, median (s) | 61.1 | 56.2 | 49.0 |
-| Time to finish, p25–p75 (s) | 42.4–79.8 | 35.7–84.4 | 29.7–69.1 |
+| Finish within 3 attempts | 98% | 84% | 34% |
+| Attempts needed (eventual finishers) | 1.17 | 1.40 | 1.63 |
+| Lives lost per first attempt | 1.02 | 1.76 | 2.59 |
+| Time to finish, median (s) | 61.1 | 56.2 | 40.0 |
+| Time to finish, p25–p75 (s) | 42.4–79.8 | 35.7–84.4 | 24.4–66.7 |
 | Lowest Holding Power in run, median | 74.9 | 2.6 | 0.0 |
-| Beans eaten (mean) | 9.8 | 9.6 | 9.4 |
-| Bananas eaten (mean) | 0.88 | 0.72 | 0.56 |
-| Seconds fart-flying (mean) | 13.1 | 14.6 | 14.7 |
+| Beans eaten (mean) | 9.8 | 9.6 | 5.4 |
+| Bananas eaten (mean) | 0.88 | 0.72 | 0.60 |
+| Seconds fart-flying (mean) | 13.1 | 14.6 | 15.7 |
 | Seconds on an empty tank (mean) | 0.0 | 0.0 | 0.0 |
-| Enemies farted (mean) | 0.32 | 0.34 | 0.38 |
-| Deaths: hit / fall / accident | 1021 / 0 / 0 | 1138 / 0 / 621 | 1241 / 0 / 1220 |
+| Enemies farted (mean) | 0.32 | 0.34 | 0.39 |
+| Deaths: hit / fall / accident | 1021 / 0 / 0 | 1138 / 0 / 621 | 1247 / 0 / 1347 |
 
 ### Tuning values
 
@@ -124,11 +125,12 @@ Bold = changed from the default.
 | `fartingFlyCostPerSec` | 15 | 15 | 15 | **18.94** |
 | `beanFarting` | 5 | **7.03** | **7.17** | **7.17** |
 | `bananaFartingCost` | 10 | 10 | 10 | **12.42** |
-| `holdingDrainPerSec` | 1.1 | **0.2** | 1.1 | **1.55** |
+| `beanShare` | 1 | 1 | 1 | **0.6** |
+| `holdingDrainPerSec` | 1.1 | **0.2** | 1.1 | **1.5** |
 | `holdingProgressExtra` | 1.5 | **3** | **2.94** | **2.94** |
 | `holdingBeanCost` | 1 | 1 | 1 | 1 |
 | `holdingBeansoupCost` | 15 | **6.75** | 15 | 15 |
-| `holdingBanana` | 20 | 20 | 20 | 20 |
+| `holdingBanana` | 20 | 20 | 20 | **5** |
 | `holdingRespawnMin` | 40 | 40 | 40 | 40 |
 
 ### easy: by persona
@@ -159,11 +161,11 @@ Where first-attempt deaths happen (level x): 0-200: 42, 200-400: 645, 400-600: 1
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 99% | 34.0 | 28.1 | 0.45 | 1.31 | 13.3 | 24/0/21 |
-| casual | 14% | 7.6 | 68.7 | 2.76 | 0.46 | 15.5 | 487/0/480 |
-| collector | 51% | 13.1 | 60.4 | 2.08 | 0.94 | 18.2 | 145/0/271 |
-| cautious | 8% | 17.9 | 85.1 | 2.91 | 0.40 | 13.3 | 187/0/249 |
-| newbie | 1% | 5.6 | 72.0 | 2.98 | 0.12 | 11.6 | 398/0/199 |
+| speedrunner | 97% | 23.1 | 24.7 | 0.50 | 1.20 | 14.0 | 20/0/30 |
+| casual | 6% | 5.8 | 64.9 | 2.90 | 0.56 | 16.7 | 490/0/524 |
+| collector | 32% | 7.7 | 63.2 | 2.45 | 0.97 | 19.7 | 161/0/329 |
+| cautious | 5% | 5.4 | 103.0 | 2.95 | 0.47 | 14.3 | 184/0/258 |
+| newbie | 1% | 18.1 | 74.2 | 2.99 | 0.13 | 11.9 | 392/0/206 |
 
-Where first-attempt deaths happen (level x): 0-200: 36, 200-400: 747, 400-600: 166, 600-800: 189, 800-1000: 145, 1000-1200: 609, 1200-1400: 569
+Where first-attempt deaths happen (level x): 0-200: 28, 200-400: 737, 400-600: 212, 600-800: 226, 800-1000: 147, 1000-1200: 687, 1200-1400: 557
 

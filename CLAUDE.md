@@ -285,7 +285,10 @@ The trade-off with Farting Power: anything that refuels gas drains Holding Power
 (`tuning.holdingBeanCost`, `tuning.holdingBeansoupCost`), while bananas
 (`level.bananas`, constipating) refill it (`tuning.holdingBanana`) at the cost of
 a little gas. Bananas
-stay eaten after a respawn, like beans.
+stay eaten after a respawn, like beans. `tuning.beanShare` (0–1) thins out a
+stage's beans per difficulty (`beanPresent()` in `tuning.ts` spreads the
+removals evenly): left-out beans start the run marked collected, so nothing
+else needs to know, and the HUD counts only the beans actually placed.
 
 Hitting 0 is an "accident" — `die("accident")`, which costs a life like any
 other death (`dyingCause` is `"hit" | "fall" | "accident"`). Reaching a

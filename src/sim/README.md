@@ -75,6 +75,18 @@ npm run sim               # full option list
   drifting. A difficulty stops early once it has been on target for two
   rounds; the drain is then calibrated on the check's own players. The result is checked on fresh players before it's written.
 
+## Trying ideas by hand
+
+`evaluate --stages stage2 --only hard --seed 1001 --set k=v,k=v` simulates a
+preset with some values changed, on the check's own players (seed 1001), and
+prints the headline numbers — handy for testing a hunch ("fewer beans?",
+"weaker banana?") in a minute or two. Once something lands on target, start a
+tune from it with `tune --stages stage2 --only hard --set k=v,k=v`, which
+validates it, calibrates the drain and writes the presets, report and baseline.
+That's how stage 2 Hard got on target: the drain alone couldn't do it (finishers
+who'd end nearly empty have an accident instead), but a weaker banana — the
+last refill before the toilet — plus fewer beans did.
+
 ## Calibrating against real players
 
 The bots are only as good as their resemblance to people. The cheapest check

@@ -33,7 +33,7 @@ import {
   type ButtonIcon,
 } from "./doodle";
 import type { ActivePower, Enemy, Level, PowerKind, Rect } from "./types";
-import { DEFAULT_TUNING, DIFFICULTIES, presetFor, type Difficulty, type Tuning } from "./tuning";
+import { beanPresent, DEFAULT_TUNING, DIFFICULTIES, presetFor, type Difficulty, type Tuning } from "./tuning";
 import { VIEW_H, VIEW_W } from "./view";
 
 export const GRAVITY = 1800; // px/s^2
@@ -297,6 +297,7 @@ export class Game {
   private deaths = 0;
   private enemiesFarted = 0;
   private beansCollected = 0;
+  private beansTotal = 0; // beans placed this run (tuning.beanShare can leave some out)
   private beanCombo = 0;
   private beanComboTimer = 0;
   private bestTime: number | null;
@@ -399,7 +400,10 @@ export class Game {
     this.lives = MAX_LIVES;
     this.activePowers.clear();
     for (const p of this.level.powerUps) p.collected = false;
-    for (const b of this.level.beans) b.collected = false;
+    // Beans the difficulty leaves out start "collected", so nothing else
+    // (drawing, pickups, the bots) needs to know about beanShare.
+    this.level.beans.forEach((b, i) => (b.collected = !beanPresent(i, this.tuning.beanShare)));
+    this.beansTotal = this.level.beans.filter((b) => !b.collected).length;
     for (const b of this.level.bananas) b.collected = false;
     for (const c of this.level.checkpoints) c.reached = false;
     this.checkpointRaise = this.level.checkpoints.map(() => 0);
@@ -1811,7 +1815,7 @@ export class Game {
 
     // Beans.
     drawBean(ctx, 348, 31, 8, -0.3);
-    handText(ctx, `${this.beansCollected}/${this.level.beans.length}`, 362, 32, 22, INK, { align: "left" });
+    handText(ctx, `${this.beansCollected}/${this.beansTotal}`, 362, 32, 22, INK, { align: "left" });
 
     // Active power-ups: icon + draining ring, blinking just before expiry.
     let x = 440;
@@ -1881,7 +1885,7 @@ export class Game {
     const rows: [string, string][] = [
       ["Stage", `${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]}`],
       ["Time", formatTime(this.runTime)],
-      ["Beans", `${this.beansCollected} / ${this.level.beans.length}`],
+      ["Beans", `${this.beansCollected} / ${this.beansTotal}`],
       ["Enemies farted", String(this.enemiesFarted)],
       ["Lives lost", String(this.deaths)],
       ["Held it in with", `${Math.ceil(this.holdingPower)}% to spare`],

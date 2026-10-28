@@ -45,6 +45,7 @@ export const PARAM_BOUNDS: Partial<Record<keyof Tuning, [number, number]>> = {
   fartingFlyCostPerSec: [8, 40],
   beanFarting: [2, 12],
   bananaFartingCost: [0, 25],
+  beanShare: [0, 1],
   holdingDrainPerSec: [0.2, 6],
   holdingProgressExtra: [0, 3],
   holdingBeanCost: [0, 3],

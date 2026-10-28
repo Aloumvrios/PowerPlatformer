@@ -38,8 +38,10 @@
       "fartingFlyCostPerSec": 18.94,
       "beanFarting": 7.17,
       "bananaFartingCost": 12.42,
-      "holdingDrainPerSec": 1.55,
-      "holdingProgressExtra": 2.94
+      "beanShare": 0.6,
+      "holdingDrainPerSec": 1.5,
+      "holdingProgressExtra": 2.94,
+      "holdingBanana": 5
     }
   }
 }
