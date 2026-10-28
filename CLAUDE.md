@@ -121,7 +121,10 @@ further conversion.
 every frame via `setUiButtons()`. A press that *starts* on a button never becomes
 a game action; the button's `onPress` fires synchronously on release, inside the
 pointer event, because fullscreen and audio unlock need a real user gesture (a
-callback deferred to the next `requestAnimationFrame` wouldn't qualify).
+callback deferred to the next `requestAnimationFrame` wouldn't qualify). Press
+and release are matched by the button's **`id`**, not object identity — the rects
+are fresh objects every frame, so an identity check silently drops any press
+longer than one frame (which, for a real person, is nearly all of them).
 
 `getPressIndicator()` exposes the press currently being decided (0→1 over
 `HOLD_THRESHOLD_MS`) so `game.ts` can draw a filling ring — that's what makes
@@ -336,7 +339,9 @@ available in this environment — see the top-level system docs on the pre-
 installed browser): `page.mouse`/`page.touchscreen` to simulate input,
 `window.__game` (dev server only) to set up states directly — e.g. teleport the
 player next to the toilet or set `fartingPower` — instead of playing there,
-`page.screenshot()` to capture state, occasionally CDP `Input.dispatchTouchEvent`
+`page.screenshot()` to capture state (for clicks, use `mouse.down()`, a ~100ms
+wait, then `mouse.up()` like a real press: `page.mouse.click()` releases within
+the same frame and once hid a bug that broke every on-canvas button for humans), occasionally CDP `Input.dispatchTouchEvent`
 for multi-touch gestures. Prefer `devices['iPhone 12']` (or similar) contexts when
 checking anything mobile/camera/viewport-related, as in the canvas-scaling fix.
 

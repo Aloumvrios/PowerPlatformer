@@ -178,7 +178,11 @@ function endPointer(e: PointerEvent): void {
   const button = uiPresses.get(e.pointerId);
   if (button) {
     uiPresses.delete(e.pointerId);
-    if (hitButton(canvasLocalPoint(e.clientX, e.clientY)) === button) button.onPress();
+    // Match by id, not identity: game.ts re-registers fresh button objects
+    // every frame, so any press longer than a frame would never match. Fire
+    // the current registration, whose onPress reflects the current state.
+    const released = hitButton(canvasLocalPoint(e.clientX, e.clientY));
+    if (released?.id === button.id) released.onPress();
     return;
   }
   const st = pointers.get(e.pointerId);
