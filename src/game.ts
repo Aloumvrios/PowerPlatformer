@@ -1303,8 +1303,12 @@ export class Game {
         },
       });
     }
-    if (this.status === "title") {
-      // Difficulty picker under the "How to play" card.
+    // Difficulty picker: under the "How to play" card on the title screen,
+    // and under the pause / game-over / win cards so it can be changed
+    // without going back to the title.
+    const pickerY: Partial<Record<Status, number>> = { title: 446, paused: 396, gameover: 396, won: 482 };
+    const py = pickerY[this.status];
+    if (py !== undefined) {
       const bw = 120;
       const gap = 16;
       let bx = (VIEW_W - (bw * 3 + gap * 2)) / 2;
@@ -1314,12 +1318,20 @@ export class Game {
           label: DIFFICULTY_LABEL[d],
           selected: d === this.difficulty,
           x: bx,
-          y: 446,
+          y: py,
           w: bw,
           h: 40,
           onPress: () => {
             sfx("ui");
+            if (d === this.difficulty) return;
             this.setDifficulty(d);
+            // Mid-run, the meters would mix two sets of values, so the stage
+            // restarts (still paused). After a win or game over, the next run
+            // simply uses the new difficulty.
+            if (this.status === "paused") {
+              this.resetRun();
+              this.setStatus("paused");
+            }
           },
         });
         bx += bw + gap;
@@ -1451,7 +1463,7 @@ export class Game {
         this.renderTitle();
         break;
       case "paused":
-        this.renderCard("Paused", [`${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode`, "Tap anywhere to keep going"], 0);
+        this.renderCard("Paused", [`${STAGES[this.stageIndex].name} · ${DIFFICULTY_LABEL[this.difficulty]} mode`, "Tap anywhere to keep going", "(changing difficulty restarts the stage)"], 0);
         break;
       case "won":
         this.renderWinCard();

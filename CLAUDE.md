@@ -160,9 +160,12 @@ camera doesn't follow" / "the player gets stuck at the edge of the screen".
 
 ## Difficulty
 
-Presets are **per stage**. The title screen has an Easy / Medium / Hard picker (on-canvas text buttons via
-the same `setUiButtons()` path as pause/mute; a press on one never starts the
-run). The choice and the best time *per stage and difficulty* are saved in
+Presets are **per stage**. An Easy / Medium / Hard picker (on-canvas text
+buttons via the same `setUiButtons()` path as pause/mute; a press on one never
+starts or resumes the run) sits under the title card and under the pause,
+game-over and win cards. Changing it while paused restarts the stage (still
+paused), since the meters would otherwise mix two sets of values; on the end
+cards the next run just uses the new difficulty. The choice and the best time *per stage and difficulty* are saved in
 `localStorage`. Difficulty only swaps the `Tuning` object; physics, level and
 lives are the same in every mode.
 
