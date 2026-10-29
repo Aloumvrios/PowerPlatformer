@@ -24,6 +24,7 @@ export interface Tuning {
   // Stalls: seconds each one holds you up if you don't tap to hurry
   stallNpcSec: number; // "do you have time to talk about pants insurance?"
   stallDoorSec: number; // unlocking a locked door
+  stallShoesSec: number; // taking your shoes off before going into a house
 }
 
 // The values the game shipped with before difficulties existed, and what
@@ -46,6 +47,7 @@ export const DEFAULT_TUNING: Tuning = {
   holdingRespawnMin: 40,
   stallNpcSec: 4,
   stallDoorSec: 3,
+  stallShoesSec: 2.5,
 };
 
 export type Difficulty = "easy" | "medium" | "hard";

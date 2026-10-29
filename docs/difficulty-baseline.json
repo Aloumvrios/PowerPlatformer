@@ -6,42 +6,42 @@
   "stages": {
     "stage1": {
       "easy": {
-        "finishRate": 0.988,
-        "holdingMedian": 86.2,
-        "timeMedian": 17.4,
+        "finishRate": 0.993,
+        "holdingMedian": 85.8,
+        "timeMedian": 17.8,
         "livesLost": 0.31
       },
       "medium": {
-        "finishRate": 0.683,
-        "holdingMedian": 25.5,
-        "timeMedian": 16.2,
-        "livesLost": 1.4
+        "finishRate": 0.591,
+        "holdingMedian": 25.4,
+        "timeMedian": 17.5,
+        "livesLost": 1.66
       },
       "hard": {
-        "finishRate": 0.196,
-        "holdingMedian": 14.6,
-        "timeMedian": 10.9,
-        "livesLost": 2.54
+        "finishRate": 0.194,
+        "holdingMedian": 14.7,
+        "timeMedian": 11.2,
+        "livesLost": 2.55
       }
     },
     "stage2": {
       "easy": {
         "finishRate": 0.853,
-        "holdingMedian": 84,
-        "timeMedian": 66.1,
+        "holdingMedian": 83.7,
+        "timeMedian": 66.5,
         "livesLost": 0.98
       },
       "medium": {
-        "finishRate": 0.542,
+        "finishRate": 0.528,
         "holdingMedian": 27.9,
-        "timeMedian": 74,
-        "livesLost": 1.94
+        "timeMedian": 75.3,
+        "livesLost": 1.96
       },
       "hard": {
-        "finishRate": 0.19,
-        "holdingMedian": 13.8,
-        "timeMedian": 48.2,
-        "livesLost": 2.59
+        "finishRate": 0.172,
+        "holdingMedian": 14.4,
+        "timeMedian": 35.5,
+        "livesLost": 2.62
       }
     }
   }

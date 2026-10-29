@@ -43,8 +43,11 @@ export interface Enemy extends Rect {
 // past avoids them (at a gas cost).
 // "door": a locked door, solid until unlocked; standing against it (on the
 // ground) starts unlocking it. Once open it stays open.
+// "shoes": a house's doormat — shoes come off before going in. Like the
+// salesperson, it only catches a player on the ground; the shoes stay on the
+// mat afterwards.
 export interface Stall extends Rect {
-  kind: "npc" | "door";
+  kind: "npc" | "door" | "shoes";
   done: boolean;
 }
 
