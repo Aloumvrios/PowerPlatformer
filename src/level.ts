@@ -97,7 +97,11 @@ export const level1: Level = {
 
   // Stands on the ground under the second platform: hop up onto the
   // platforms to get past without being sold anything.
-  stalls: [{ x: 585, y: 440, w: 70, h: 60, kind: "npc", done: false }],
+  stalls: [
+    { x: 585, y: 440, w: 70, h: 60, kind: "npc", done: false },
+    // The house's doormat: hop across on the platforms above to keep your shoes on.
+    { x: 845, y: 440, w: 130, h: 60, kind: "shoes", done: false },
+  ],
 
   checkpoints: [{ x: 1120, y: 440, w: 26, h: 60, reached: false }],
 
@@ -111,7 +115,7 @@ export const level1: Level = {
     { x: 2150, y: 300, text: "nature calls →" },
   ],
 
-  decor: [],
+  decor: [{ x: 842, y: 330, w: 146, h: 170, kind: "house" }],
 
   goal: { x: 2288, y: 380, w: 46, h: 60 },
 };
@@ -208,6 +212,8 @@ export const level2: Level = {
     { x: skX(810), y: skY(1345) - 60, w: 70, h: 60, kind: "npc", done: false },
     // Locks the bottom tunnel just before the shaft, wall to floor.
     { ...sk(1220, 1620, 1243, 1790), kind: "door", done: false },
+    // The doormat of the house on the street.
+    { ...sk(630, 795, 800, 860), kind: "shoes", done: false },
   ],
 
   checkpoints: [{ x: skX(640), y: skY(1345) - 60, w: 26, h: 60, reached: false }],

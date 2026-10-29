@@ -976,6 +976,39 @@ export function drawLockedDoor(ctx: CanvasRenderingContext2D, r: Rect, open: boo
   ctx.restore();
 }
 
+// A doormat across the bottom of `r` with "WELCOME" on it; once `shoesOff`,
+// a pair of shoes sits on it.
+export function drawDoormat(ctx: CanvasRenderingContext2D, r: Rect, shoesOff: boolean): void {
+  ctx.save();
+  const mat: Rect = { x: r.x + 6, y: r.y + r.h - 6, w: r.w - 12, h: 6 };
+  ctx.fillStyle = "#b5552a";
+  ctx.fillRect(mat.x, mat.y, mat.w, mat.h);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.4;
+  sketchRect(ctx, mat, 1970, 0.5);
+  ctx.restore();
+  handText(ctx, "WELCOME", mat.x + mat.w / 2, mat.y + 14, 11, "#6b6b78");
+  if (!shoesOff) return;
+  ctx.save();
+  ctx.fillStyle = "#3a3540";
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.2;
+  for (const dx of [-9, 7]) {
+    const sx = mat.x + mat.w * 0.3 + dx;
+    const sy = mat.y;
+    ctx.beginPath();
+    ctx.moveTo(sx - 7, sy);
+    ctx.lineTo(sx - 7, sy - 6);
+    ctx.quadraticCurveTo(sx - 2, sy - 9, sx + 2, sy - 5);
+    ctx.lineTo(sx + 8, sy - 3);
+    ctx.quadraticCurveTo(sx + 10, sy - 1, sx + 9, sy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // A hand-drawn speech bubble whose tail points down at (x, y); `text` is
 // wrapped to `maxW`.
 export function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, maxW: number): void {

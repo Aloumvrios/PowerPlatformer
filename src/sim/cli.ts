@@ -300,7 +300,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       for (const d of only) entries.push(await entry(io, stage.id, d, { ...presetFor(stage.id, d), ...overrides }, sessions, seed, personas, d));
       for (const e of entries)
         io.log(
-          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s  held up ${((e.summary.stallsMean ?? 0) * 100).toFixed(0)}% of runs, ${e.summary.stallSecMean?.toFixed(1) ?? "—"}s avg`,
+          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s  held up ${(e.summary.stallsMean ?? 0).toFixed(2)}× per run, ${e.summary.stallSecMean?.toFixed(1) ?? "—"}s avg`,
         );
       stages.push({ title: `${stage.name} (\`${stage.id}\`)`, entries });
       json[stage.id] = entries;

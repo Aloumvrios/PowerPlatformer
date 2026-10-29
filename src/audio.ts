@@ -23,6 +23,7 @@ export type SfxName =
   | "hurry"
   | "keys"
   | "unlock"
+  | "shoes"
   | "shield"
   | "death"
   | "checkpoint"
@@ -288,6 +289,13 @@ export function sfx(name: SfxName, intensity = 1, pitch = 1): void {
       noiseBurst(0.05, 0.3, 2500); // click
       tone(140, 0.25, 0.3, "triangle", 0.05, 70); // clunk
       [523, 784].forEach((f, i) => tone(f, 0.15, 0.18, "triangle", 0.2 + i * 0.08));
+      break;
+    case "shoes":
+      // Two soft thuds: one shoe, then the other.
+      [0, 0.18].forEach((at) => {
+        tone(110, 0.08, 0.25, "sine", at, 60);
+        noiseBurst(0.05, 0.12, 700, at);
+      });
       break;
     case "shield":
       tone(1200, 0.25, 0.25, "sine", 0, 300);

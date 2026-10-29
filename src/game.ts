@@ -2,7 +2,7 @@ import { getPressIndicator, pointerInput, setUiButtons, type InputSource, type U
 import { STAGES } from "./level";
 import { routeProgress } from "./nav";
 import { sprites, JUMP_SEQUENCE, type SpriteName } from "./sprites";
-import { isMuted, setFlying, sfx, toggleMute } from "./audio";
+import { isMuted, setFlying, sfx, toggleMute, type SfxName } from "./audio";
 import {
   INK,
   MARKER_FONT,
@@ -19,6 +19,7 @@ import {
   drawPlatform,
   drawPuffIcon,
   drawSolid,
+  drawDoormat,
   drawLockedDoor,
   drawSalesperson,
   drawSpeechBubble,
@@ -103,6 +104,13 @@ const HOLDING_LOW = 25; // below this the stomach rumbles, the screen shakes and
 // off, but a stall always lasts at least STALL_MIN_SHARE of its full length.
 const STALL_TAP_SEC = 0.3;
 const STALL_MIN_SHARE = 0.4;
+// Per kind: the sound when a stall starts, and the word and sound for each
+// tap that hurries it.
+const STALL_FX: Record<Stall["kind"], { start: SfxName; tap: SfxName; word: string }> = {
+  npc: { start: "talk", tap: "hurry", word: "No thanks!" },
+  door: { start: "keys", tap: "keys", word: "*jiggle*" },
+  shoes: { start: "shoes", tap: "hurry", word: "hop!" },
+};
 const SALES_PITCH = [
   "Do you have time to talk about pants insurance?",
   "Accidents happen! Are YOUR pants covered?",
@@ -192,6 +200,8 @@ export function stallSecondsFor(spot: Stall, tuning: Tuning): number {
       return tuning.stallNpcSec;
     case "door":
       return tuning.stallDoorSec;
+    case "shoes":
+      return tuning.stallShoesSec;
   }
 }
 
@@ -1036,7 +1046,7 @@ export class Game {
     this.jumpBuffer = 0;
     this.launchTier = null;
     this.stats.stalls++;
-    sfx(spot.kind === "door" ? "keys" : "talk");
+    sfx(STALL_FX[spot.kind].start);
   }
 
   // Held in place while Holding Power keeps draining. Taps and double-taps
@@ -1053,9 +1063,8 @@ export class Game {
     const floor = Math.max(0, st.total * STALL_MIN_SHARE - st.elapsed);
     for (let i = 0; i < taps; i++) {
       st.remaining = Math.max(floor, st.remaining - STALL_TAP_SEC);
-      const word = st.spot.kind === "door" ? "*jiggle*" : "No thanks!";
-      this.floatText(p.x + p.w / 2 + rand(-14, 14), p.y - 26, word, "#3b5bd6", 18);
-      sfx(st.spot.kind === "door" ? "keys" : "hurry");
+      this.floatText(p.x + p.w / 2 + rand(-14, 14), p.y - 26, STALL_FX[st.spot.kind].word, "#3b5bd6", 18);
+      sfx(STALL_FX[st.spot.kind].tap);
     }
     st.elapsed += dt;
     st.remaining -= dt;
@@ -1068,6 +1077,11 @@ export class Game {
     this.stall = null;
     spot.done = true;
     const cx = spot.x + spot.w / 2;
+    if (spot.kind === "shoes") {
+      this.floatText(cx, spot.y - 10, "…in socks!", "#6b6b78", 18);
+      sfx("shoes");
+      return;
+    }
     if (spot.kind === "door") {
       this.floatText(cx, spot.y + spot.h * 0.3, "CLICK!", "#8a5a2b", 24);
       this.burst("spark", cx, spot.y + spot.h * 0.55, 10, 160, "#f2b705");
@@ -1639,6 +1653,7 @@ export class Game {
       if (!onScreen(spot, 60)) continue;
       const active = this.stall?.spot === spot;
       if (spot.kind === "door") drawLockedDoor(ctx, spot, spot.done, active ? this.elapsed : null);
+      else if (spot.kind === "shoes") drawDoormat(ctx, spot, spot.done);
       else if (!spot.done) drawSalesperson(ctx, spot.x + spot.w / 2, spot.y + spot.h, this.elapsed, active, pc.x < spot.x + spot.w / 2 ? -1 : 1);
     }
 
@@ -1870,6 +1885,8 @@ export class Game {
     if (spot.kind === "npc") {
       const line = SALES_PITCH[Math.floor(st.elapsed / 1.6) % SALES_PITCH.length];
       drawSpeechBubble(ctx, spot.x + spot.w / 2, spot.y - 78, line, 240); // above the hurry ring
+    } else if (spot.kind === "shoes") {
+      drawSpeechBubble(ctx, spot.x + spot.w * 0.8, spot.y - 78, "Shoes off, please!", 200);
     }
     const cx = p.x + p.w / 2;
     const cy = p.y - 56;
