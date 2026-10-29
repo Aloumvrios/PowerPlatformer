@@ -35,6 +35,8 @@ export class Agent implements InputSource {
   private flyDirX: -1 | 0 | 1 = 0;
   private flyUpSec = 0; // planned straight-up part of the current hold
   private flyElapsed = 0;
+  private tapAcc = 0; // fractional taps owed while mashing through a stall
+  private wasStalled = false;
   private flyEngaged = false;
   private lastFurthest = 0;
   private stuckSec = 0;
@@ -111,6 +113,24 @@ export class Agent implements InputSource {
       this.stuckSec = 0;
     } else {
       this.stuckSec += dt;
+    }
+
+    // Held up by a stall: mash taps to hurry it along (it never launches
+    // anyone), then take a moment before moving on.
+    if (g.stalled) {
+      this.flyTarget = null;
+      this.tapAcc += dt * this.persona.tapRate;
+      if (this.tapAcc >= 1) {
+        this.tapAcc -= 1;
+        this.clickTarget = this.screenCenter();
+      }
+      this.wasStalled = true;
+      return;
+    }
+    if (this.wasStalled) {
+      this.wasStalled = false;
+      this.tapAcc = 0;
+      this.toIdle();
     }
 
     this.maybeAttack();
@@ -338,6 +358,13 @@ export class Agent implements InputSource {
           ? t.fartingJumpCost
           : t.fartingWeakLaunchCost;
     score -= (gasCost / 25) * persona.economy * (0.5 + gasNeed);
+    if (res.outcome === "stall" && res.stall) {
+      // Getting caught costs time; how much that matters depends on the clock.
+      // Expected length given how fast this persona mashes to hurry it.
+      const full = t.stallNpcSec;
+      const expected = Math.max(full * 0.4, full / (1 + 0.3 * persona.tapRate));
+      score -= expected * (0.2 + persona.economy * (0.5 + holdNeed * 1.5));
+    }
     // Time spent, felt more as Holding Power runs low.
     score -= res.t * (0.2 + holdNeed * persona.economy * 1.5);
     return score;

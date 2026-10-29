@@ -300,7 +300,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       for (const d of only) entries.push(await entry(io, stage.id, d, { ...presetFor(stage.id, d), ...overrides }, sessions, seed, personas, d));
       for (const e of entries)
         io.log(
-          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s`,
+          `${stage.id} ${e.name.padEnd(7)} finish ${(e.summary.finishRate * 100).toFixed(0)}%  holding ${e.summary.holdingMedian?.toFixed(1) ?? "—"}  time ${e.summary.timeMedian?.toFixed(1) ?? "—"}s  held up ${((e.summary.stallsMean ?? 0) * 100).toFixed(0)}% of runs, ${e.summary.stallSecMean?.toFixed(1) ?? "—"}s avg`,
         );
       stages.push({ title: `${stage.name} (\`${stage.id}\`)`, entries });
       json[stage.id] = entries;
@@ -322,7 +322,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         const s = runSession(presetFor(stageId, d), stageId, p, seed * 100003 + i, opts.verbose ? io.log : undefined);
         s.attempts.forEach((a, n) =>
           io.log(
-            `${p.name.padEnd(12)} #${i} try${n + 1} ${a.won ? "WON " : "lost"} ${a.time.toFixed(1).padStart(5)}s  holding ${a.finalHolding.toFixed(0).padStart(3)}  hops ${a.hops} jumps ${a.jumps} fly ${a.flightSec.toFixed(1)}s  beans ${a.beans} bananas ${a.bananas}  deaths ${a.deathLog.map((x) => `${x.cause}@${Math.round(x.x)}`).join(",") || "-"}`,
+            `${p.name.padEnd(12)} #${i} try${n + 1} ${a.won ? "WON " : "lost"} ${a.time.toFixed(1).padStart(5)}s  holding ${a.finalHolding.toFixed(0).padStart(3)}  hops ${a.hops} jumps ${a.jumps} fly ${a.flightSec.toFixed(1)}s  beans ${a.beans} bananas ${a.bananas}  stalled ${a.stallSec.toFixed(1)}s  deaths ${a.deathLog.map((x) => `${x.cause}@${Math.round(x.x)}`).join(",") || "-"}`,
           ),
         );
       }

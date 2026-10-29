@@ -19,6 +19,7 @@ export interface Persona {
   fumble: number; // chance an action is a poorly-judged one (any option that doesn't kill them outright)
   doubleTapMiss: number; // chance a double-tap comes out as a single tap
   misjudge: number; // relative error in how far they think a launch / fly-hold will carry them
+  tapRate: number; // taps per second while held up by a stall (mashing to hurry it along)
 }
 
 export const PERSONAS: Persona[] = [
@@ -37,6 +38,7 @@ export const PERSONAS: Persona[] = [
     fumble: 0.03,
     doubleTapMiss: 0.02,
     misjudge: 0.05,
+    tapRate: 6,
   },
   {
     name: "casual",
@@ -53,6 +55,7 @@ export const PERSONAS: Persona[] = [
     fumble: 0.15,
     doubleTapMiss: 0.1,
     misjudge: 0.22,
+    tapRate: 2.5,
   },
   {
     name: "collector",
@@ -69,6 +72,7 @@ export const PERSONAS: Persona[] = [
     fumble: 0.08,
     doubleTapMiss: 0.06,
     misjudge: 0.15,
+    tapRate: 3,
   },
   {
     name: "cautious",
@@ -85,6 +89,7 @@ export const PERSONAS: Persona[] = [
     fumble: 0.05,
     doubleTapMiss: 0.05,
     misjudge: 0.12,
+    tapRate: 1.5,
   },
   {
     name: "newbie",
@@ -101,6 +106,7 @@ export const PERSONAS: Persona[] = [
     fumble: 0.3,
     doubleTapMiss: 0.2,
     misjudge: 0.35,
+    tapRate: 1.5,
   },
 ];
 

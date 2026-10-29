@@ -52,4 +52,5 @@ export const PARAM_BOUNDS: Partial<Record<keyof Tuning, [number, number]>> = {
   holdingBeansoupCost: [0, 30],
   holdingBanana: [5, 40],
   holdingRespawnMin: [15, 60],
+  stallNpcSec: [1.5, 8],
 };

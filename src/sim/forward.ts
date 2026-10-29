@@ -14,11 +14,11 @@ import {
   GROUND_FRICTION,
   stepEnemy,
 } from "../game";
-import type { Level, Rect } from "../types";
+import type { Level, Rect, Stall } from "../types";
 
 const DT = 1 / 60;
 
-export type Outcome = "landed" | "goal" | "hazard" | "enemy" | "fell" | "timeout";
+export type Outcome = "landed" | "goal" | "hazard" | "enemy" | "fell" | "timeout" | "stall";
 
 export interface ForwardStart {
   x: number;
@@ -50,6 +50,7 @@ export interface ForwardResult {
   bananas: number[];
   powerUps: number[];
   edgeMargin: number; // how far from the platform's edge it came to rest
+  stall: Stall | null; // the stall that caught the player (outcome "stall")
 }
 
 function hits(ax: number, ay: number, aw: number, ah: number, b: Rect): boolean {
@@ -67,6 +68,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
   let t = 0;
   let launched = false;
   let landedOn: Rect | null = null;
+  let caughtBy: Stall | null = null;
 
   const result = (outcome: Outcome): ForwardResult => ({
     outcome,
@@ -78,6 +80,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
     bananas,
     powerUps,
     edgeMargin: landedOn ? Math.min(x + w / 2 - landedOn.x, landedOn.x + landedOn.w - (x + w / 2)) : 0,
+    stall: caughtBy,
   });
 
   while (t < action.maxSec) {
@@ -166,6 +169,11 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
       if (!b.collected && !bananas.includes(i) && hits(gx, gy, w + 12, h + 12, b)) bananas.push(i);
     });
     if (hits(x, y, w, h, level.goal)) return result("goal");
+    // Same rule as Game.checkStalls(): caught while standing on the ground.
+    if (onGround) {
+      caughtBy = level.stalls.find((s) => !s.done && hits(x, y, w, h, s)) ?? null;
+      if (caughtBy) return result("stall");
+    }
     if (y > level.heightPx + 80) return result("fell");
     // At rest on a platform after the action has played out.
     if (onGround && wasGround && vx === 0 && (!fly || t >= fly.sec || farting <= 0)) return result("landed");

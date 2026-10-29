@@ -50,8 +50,8 @@ pushing to `main` ships.
   the ordered list of playable stages (`{ id, name, level }`). A level has
   one-way `platforms`, solid `solids`, `hazards` (spikes; `dir` says which way
   they point), `enemies` (urchins or crawlers, patrolling along x, or y with
-  `axis: "y"`), pickups, checkpoints, pencilled-on hints, background `decor`,
-  and the goal (drawn as a toilet). No level editor or loader — edit the array literals
+  `axis: "y"`), pickups, checkpoints, `stalls` (see "Stalls" below),
+  pencilled-on hints, background `decor`, and the goal (drawn as a toilet). No level editor or loader — edit the array literals
   directly. Winning a stage moves on to the next (back to the first after the
   last). A stage's `id` keys its presets and saved best times, so keep it
   stable once shipped.
@@ -296,6 +296,25 @@ checkpoint saves the current Holding Power; a respawn restores that, floored at
 `tuning.holdingRespawnMin` so one accident can't snowball into a death spiral. Below
 `HOLDING_LOW` the stomach rumbles (`updateRumble()`), the screen shakes and the
 hero trembles.
+
+### Stalls
+
+Spots that hold the player up for a few seconds while Holding Power keeps
+draining (`level.stalls`, `Stall` in `types.ts`). So far: `"npc"`, the
+pants-insurance salesperson. `checkStalls()` starts one when the player is
+**standing on the ground** inside its rect — jumping or flying past avoids it,
+at a gas cost. While stalled, the movement part of `update()` is skipped (the
+player is frozen; hazards, enemies and the meters still run), and taps or
+double-taps go to `updateStall()` instead of launching: each shaves
+`STALL_TAP_SEC` off, but a stall always lasts at least `STALL_MIN_SHARE` of its
+full length (`tuning.stallNpcSec`, per difficulty). Each stall happens once per
+run (`done` survives a respawn, like checkpoints; a death mid-stall leaves it
+to trigger again). `renderStall()` draws the speech bubble and the "tap to
+hurry" ring. The bots model being caught (`"stall"` outcome in
+`src/sim/forward.ts`), weigh its time cost, and mash taps at their persona's
+`tapRate`. Adding a new kind: extend `Stall["kind"]`, `stallSeconds()`, the
+render/finish branches, a `Tuning` duration (and its `PARAM_BOUNDS`), and the
+bots' cost estimate in `agent.ts`.
 
 ### Sprite selection
 

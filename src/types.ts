@@ -36,6 +36,16 @@ export interface Enemy extends Rect {
   kind?: "urchin" | "crawler"; // floating spiky ball (default) / ground crawler
 }
 
+// A spot that holds the player up for a few seconds while Holding Power keeps
+// draining — tapping hurries it along. Each happens once per run.
+// "npc": a pants-insurance salesperson; the rect is where they'll catch you,
+// and only a player standing on the ground gets caught, so jumping or flying
+// past avoids them (at a gas cost).
+export interface Stall extends Rect {
+  kind: "npc";
+  done: boolean;
+}
+
 // Non-colliding scenery drawn behind everything else.
 export interface Decor extends Rect {
   kind: "hall" | "house" | "wc" | "door";
@@ -81,6 +91,7 @@ export interface Level {
   checkpoints: Checkpoint[];
   hints: Hint[];
   decor: Decor[];
+  stalls: Stall[];
   goal: Rect; // drawn as the toilet
 }
 

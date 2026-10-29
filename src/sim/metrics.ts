@@ -26,6 +26,8 @@ export interface AttemptResult {
   attacks: number;
   flightSec: number;
   depletedSec: number;
+  stalls: number;
+  stallSec: number;
   progress: number; // furthest along the route, 0..1
 }
 
@@ -88,6 +90,8 @@ export function runSession(tuning: Tuning, stageId: string, persona: Persona, se
       attacks: s.attacks,
       flightSec: s.flightSec,
       depletedSec: s.depletedSec,
+      stalls: s.stalls,
+      stallSec: s.stallSec,
       progress: s.progress,
     });
     if (won) break;
@@ -160,6 +164,8 @@ export interface Summary {
   bananasMean: number | null;
   flightSecMean: number | null;
   depletedSecMean: number | null;
+  stallSecMean: number | null; // time spent held up by stalls
+  stallsMean: number | null;
   enemiesFartedMean: number | null;
   minHoldingMedian: number | null;
   deathCauses: Record<DeathCause, number>; // all deaths in first attempts
@@ -197,6 +203,8 @@ export function summarize(sessions: SessionResult[]): Summary {
     bananasMean: mean(first.map((a) => a.bananas)),
     flightSecMean: mean(first.map((a) => a.flightSec)),
     depletedSecMean: mean(first.map((a) => a.depletedSec)),
+    stallSecMean: mean(first.map((a) => a.stallSec)),
+    stallsMean: mean(first.map((a) => a.stalls)),
     enemiesFartedMean: mean(first.map((a) => a.enemiesFarted)),
     minHoldingMedian: quantile(first.map((a) => a.minHolding), 0.5),
     deathCauses: causes,

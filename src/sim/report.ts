@@ -54,6 +54,8 @@ function renderStage(entries: ReportEntry[]): string[] {
   row("Bananas eaten (mean)", (e) => num(e.summary.bananasMean, 2));
   row("Seconds fart-flying (mean)", (e) => num(e.summary.flightSecMean));
   row("Seconds on an empty tank (mean)", (e) => num(e.summary.depletedSecMean));
+  row("Times held up by stalls (mean)", (e) => num(e.summary.stallsMean, 2));
+  row("Seconds held up by stalls (mean)", (e) => num(e.summary.stallSecMean));
   row("Enemies farted (mean)", (e) => num(e.summary.enemiesFartedMean, 2));
   row("Deaths: hit / fall / accident", (e) => `${e.summary.deathCauses.hit} / ${e.summary.deathCauses.fall} / ${e.summary.deathCauses.accident}`);
   out.push("");
