@@ -864,6 +864,102 @@ function drawCrawler(
   ctx.restore();
 }
 
+// --- stalls -----------------------------------------------------------------
+
+// The pants-insurance salesperson: a stick figure in a tie with a briefcase,
+// standing with feet at (x, bottom), facing `dir`. Gestures while talking.
+export function drawSalesperson(ctx: CanvasRenderingContext2D, x: number, bottom: number, t: number, talking: boolean, dir: 1 | -1): void {
+  ctx.save();
+  ctx.translate(x, bottom);
+  ctx.scale(dir, 1);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const bob = talking ? Math.sin(t * 9) * 1.5 : Math.sin(t * 2) * 0.8;
+  const hipY = -26;
+  const neckY = -46 + bob;
+  // Legs
+  sketchLine(ctx, 0, hipY, -6, 0, 1900, 0.4);
+  sketchLine(ctx, 0, hipY, 6, 0, 1901, 0.4);
+  // Body
+  sketchLine(ctx, 0, neckY, 0, hipY, 1902, 0.4);
+  // Tie
+  ctx.fillStyle = "#c62f2f";
+  ctx.beginPath();
+  ctx.moveTo(-2, neckY + 2);
+  ctx.lineTo(2, neckY + 2);
+  ctx.lineTo(3, neckY + 13);
+  ctx.lineTo(0, neckY + 16);
+  ctx.lineTo(-3, neckY + 13);
+  ctx.closePath();
+  ctx.fill();
+  // Back arm holds the briefcase
+  sketchLine(ctx, 0, neckY + 4, -9, hipY + 2, 1903, 0.4);
+  ctx.fillStyle = "#8a5a2b";
+  ctx.fillRect(-17, hipY + 2, 15, 11);
+  ctx.strokeRect(-17, hipY + 2, 15, 11);
+  sketchLine(ctx, -12, hipY + 2, -12, hipY - 1, 1904, 0.2);
+  sketchLine(ctx, -12, hipY - 1, -7, hipY - 1, 1905, 0.2);
+  sketchLine(ctx, -7, hipY - 1, -7, hipY + 2, 1906, 0.2);
+  // Front arm waves while pitching
+  const wave = talking ? Math.sin(t * 7) * 0.6 : 0.2;
+  sketchLine(ctx, 0, neckY + 4, 12 * Math.cos(wave - 0.6), neckY + 4 - 12 * Math.sin(wave - 0.6), 1907, 0.4);
+  // Head with slicked hair and a big grin
+  ctx.fillStyle = "#fbf7ea";
+  ctx.beginPath();
+  ctx.arc(0, neckY - 9, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, neckY - 11, 9, Math.PI * 1.05, Math.PI * 1.95);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(3, neckY - 7, 4, 0.1, Math.PI - 0.6);
+  ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.arc(4, neckY - 11, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// A hand-drawn speech bubble whose tail points down at (x, y); `text` is
+// wrapped to `maxW`.
+export function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, maxW: number): void {
+  ctx.save();
+  const size = 17;
+  ctx.font = `${size}px ${HAND_FONT}`;
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxW - 20 && line) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  const w = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 22);
+  const h = lines.length * (size + 2) + 14;
+  const box: Rect = { x: x - w / 2, y: y - h - 12, w, h };
+  ctx.fillStyle = "#fffdf5";
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.8;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  sketchRect(ctx, box, 1950, 1);
+  ctx.beginPath();
+  ctx.moveTo(x - 8, box.y + box.h);
+  ctx.lineTo(x, y);
+  ctx.lineTo(x + 6, box.y + box.h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  lines.forEach((l, i) => handText(ctx, l, x, box.y + 7 + (size + 2) * (i + 0.5), size, INK));
+}
+
 // --- HUD bits ------------------------------------------------------------
 
 export function drawHeart(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, full: boolean, seed: number): void {

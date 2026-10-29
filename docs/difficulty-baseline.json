@@ -1,47 +1,47 @@
 {
-  "generated": "2026-10-28",
+  "generated": "2026-10-29",
   "pace": 1,
   "sessions": 1000,
   "seed": 1001,
   "stages": {
     "stage1": {
       "easy": {
-        "finishRate": 0.978,
+        "finishRate": 0.987,
         "holdingMedian": 86.4,
-        "timeMedian": 16.9,
-        "livesLost": 0.33
+        "timeMedian": 17.6,
+        "livesLost": 0.32
       },
       "medium": {
-        "finishRate": 0.695,
-        "holdingMedian": 28.5,
-        "timeMedian": 15,
-        "livesLost": 1.26
+        "finishRate": 0.671,
+        "holdingMedian": 25.4,
+        "timeMedian": 15.9,
+        "livesLost": 1.4
       },
       "hard": {
-        "finishRate": 0.184,
-        "holdingMedian": 14.7,
-        "timeMedian": 10.4,
-        "livesLost": 2.56
+        "finishRate": 0.196,
+        "holdingMedian": 13.7,
+        "timeMedian": 10.6,
+        "livesLost": 2.54
       }
     },
     "stage2": {
       "easy": {
-        "finishRate": 0.844,
-        "holdingMedian": 85.7,
-        "timeMedian": 61.1,
+        "finishRate": 0.84,
+        "holdingMedian": 85.3,
+        "timeMedian": 61.6,
         "livesLost": 1.02
       },
       "medium": {
-        "finishRate": 0.583,
-        "holdingMedian": 26.7,
-        "timeMedian": 56.2,
-        "livesLost": 1.76
+        "finishRate": 0.601,
+        "holdingMedian": 29,
+        "timeMedian": 56.9,
+        "livesLost": 1.73
       },
       "hard": {
-        "finishRate": 0.191,
-        "holdingMedian": 13.8,
-        "timeMedian": 40,
-        "livesLost": 2.59
+        "finishRate": 0.188,
+        "holdingMedian": 13.4,
+        "timeMedian": 39.9,
+        "livesLost": 2.61
       }
     }
   }

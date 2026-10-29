@@ -19,6 +19,8 @@ import {
   drawPlatform,
   drawPuffIcon,
   drawSolid,
+  drawSalesperson,
+  drawSpeechBubble,
   drawSpikes,
   drawToilet,
   drawWing,
@@ -32,7 +34,7 @@ import {
   sketchRect,
   type ButtonIcon,
 } from "./doodle";
-import type { ActivePower, Enemy, Level, PowerKind, Rect } from "./types";
+import type { ActivePower, Enemy, Level, PowerKind, Rect, Stall } from "./types";
 import { beanPresent, DEFAULT_TUNING, DIFFICULTIES, presetFor, type Difficulty, type Tuning } from "./tuning";
 import { VIEW_H, VIEW_W } from "./view";
 
@@ -95,6 +97,17 @@ const BEAN_COMBO_SEC = 0.7; // beans grabbed within this of each other raise the
 // Rates and pickup values live in the difficulty's Tuning (src/tuning.ts).
 const HOLDING_MAX = 100;
 const HOLDING_LOW = 25; // below this the stomach rumbles, the screen shakes and the hero trembles
+
+// Stalls (see Stall in types.ts): each tap while held up shaves this much
+// off, but a stall always lasts at least STALL_MIN_SHARE of its full length.
+const STALL_TAP_SEC = 0.3;
+const STALL_MIN_SHARE = 0.4;
+const SALES_PITCH = [
+  "Do you have time to talk about pants insurance?",
+  "Accidents happen! Are YOUR pants covered?",
+  "Our gold plan covers up to three accidents a year!",
+  "Just sign here… and here… and here…",
+];
 const RUMBLE_WORDS = ["grrrumble…", "hnngh!", "gotta go!", "*clench*", "not now…"];
 
 export const ATTACK_RANGE = 40; // px, in front of the player
@@ -203,6 +216,8 @@ export interface RunStats {
   bananasEaten: number;
   beanSoups: number;
   minHolding: number;
+  stalls: number; // times held up (salesperson, …)
+  stallSec: number; // time spent held up
   deathLog: { cause: DeathCause; x: number; t: number }[];
 }
 
@@ -216,6 +231,8 @@ function emptyStats(): RunStats {
     bananasEaten: 0,
     beanSoups: 0,
     minHolding: HOLDING_MAX,
+    stalls: 0,
+    stallSec: 0,
     deathLog: [],
   };
 }
@@ -272,6 +289,8 @@ export class Game {
   // backtracking doesn't buy time.
   private bestProgress = 0;
   private rumbleTimer = 0;
+  // The stall holding the player up right now, if any.
+  private stall: { spot: Stall; elapsed: number; remaining: number; total: number } | null = null;
   private attackCooldown = 0;
   private attackFlash = 0;
 
@@ -362,6 +381,9 @@ export class Game {
   get holdFlying(): boolean {
     return this.isHoldFlying;
   }
+  get stalled(): boolean {
+    return this.stall !== null;
+  }
   get attackReady(): boolean {
     return this.attackCooldown <= 0;
   }
@@ -406,6 +428,7 @@ export class Game {
     this.beansTotal = this.level.beans.filter((b) => !b.collected).length;
     for (const b of this.level.bananas) b.collected = false;
     for (const c of this.level.checkpoints) c.reached = false;
+    for (const st of this.level.stalls) st.done = false;
     this.checkpointRaise = this.level.checkpoints.map(() => 0);
     for (const e of this.level.enemies) {
       e.alive = true;
@@ -449,6 +472,7 @@ export class Game {
     this.launchTier = null;
     this.isHoldFlying = false;
     this.flightExhausted = false;
+    this.stall = null;
     this.airTime = 0;
     this.squashX = 1;
     this.squashY = 1;
@@ -578,154 +602,159 @@ export class Game {
     const poweredFly = this.hasPower("fly");
     const wasHoldFlying = this.isHoldFlying;
 
-    const flyHoldTarget = this.input.getFlyTarget();
-    if (flyHoldTarget === null) {
-      this.flightExhausted = false;
-    }
-    // Flying stops the instant Farting Power runs out — the player lands
-    // instead of just flying weaker, unlike every other soft-penalized
-    // action. Once exhausted mid-flight, it stays grounded even if still
-    // held; releasing and holding again is what re-engages it (otherwise
-    // regen would let it flicker back on a frame later).
-    this.isHoldFlying = flyHoldTarget !== null && !this.flightExhausted;
-
-    if (this.isHoldFlying) {
-      if (!wasHoldFlying) {
-        const b = this.buttPos();
-        this.fartBurst(b.x, b.y, 0, 1, 7, 160, 6, 10);
-        this.squashX = 0.85;
-        this.squashY = 1.15;
-      }
-      const screenX = p.x + p.w / 2 - this.cameraX;
-      const dx = flyHoldTarget!.x - screenX;
-      if (Math.abs(dx) > FLY_HOLD_DEADZONE_PX) {
-        p.vx = Math.sign(dx) * FLY_HOLD_VX_SPEED;
-        p.facing = dx > 0 ? 1 : -1;
-      } else {
-        p.vx = 0;
-      }
-      p.vy = -FLY_HOLD_VY_SPEED;
-      p.onGround = false;
-      this.weakLaunchBuffer = 0;
-      this.jumpBuffer = 0;
-      this.launchTier = null;
-      this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingFlyCostPerSec * dt);
-      this.stats.flightSec += dt;
-      this.emitFlightJet(dt);
-      if (this.fartingPower <= 0) {
-        this.flightExhausted = true;
-        const b = this.buttPos();
-        this.fartBurst(b.x, b.y, 0, 1, 5, 60, 4, 7, "#c8c2ae");
-        this.floatText(p.x + p.w / 2, p.y - 16, "EMPTY!", "#c62f2f", 24);
-        sfx("empty");
-      }
+    if (this.stall) {
+      this.updateStall(dt);
     } else {
-      if (poweredFly) {
-        p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
-      } else {
-        p.vy += GRAVITY * dt;
+      const flyHoldTarget = this.input.getFlyTarget();
+      if (flyHoldTarget === null) {
+        this.flightExhausted = false;
       }
+      // Flying stops the instant Farting Power runs out — the player lands
+      // instead of just flying weaker, unlike every other soft-penalized
+      // action. Once exhausted mid-flight, it stays grounded even if still
+      // held; releasing and holding again is what re-engages it (otherwise
+      // regen would let it flicker back on a frame later).
+      this.isHoldFlying = flyHoldTarget !== null && !this.flightExhausted;
 
-      // Weak launch: single click/tap.
-      const clickTarget = this.input.consumeClickTarget();
-      if (clickTarget !== null) {
-        const screenX = p.x + p.w / 2 - this.cameraX;
-        const screenY = p.y + p.h / 2 - this.cameraY;
-        const dx = clickTarget.x - screenX;
-        const dy = clickTarget.y - screenY;
-        const dist = Math.hypot(dx, dy);
-        if (dist < LAUNCH_AIM_MIN_DIST) {
-          this.weakDirX = 0;
-          this.weakDirY = -1;
-        } else {
-          this.weakDirX = dx / dist;
-          this.weakDirY = dy / dist;
-        }
-        this.weakLaunchBuffer = LAUNCH_BUFFER_SEC;
-        this.ripple(clickTarget.x + this.cameraX, clickTarget.y + this.cameraY, 16);
-      }
-      if (this.weakLaunchBuffer > 0) {
-        if (p.onGround || poweredFly) {
-          const baseSpeed = WEAK_LAUNCH_SPEED * (this.hasPower("speed") ? SPEED_BOOST_MULT : 1);
-          const speed = depleted ? baseSpeed * DEPLETED_SPEED_MULT : baseSpeed;
-          p.vx = this.weakDirX * speed;
-          p.vy = this.weakDirY * speed;
-          if (Math.abs(this.weakDirX) > 0.05) {
-            p.facing = this.weakDirX > 0 ? 1 : -1;
-          }
-          p.onGround = false;
-          this.launchTier = "weak";
-          this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingWeakLaunchCost);
-          this.stats.hops++;
-          this.weakLaunchBuffer = 0;
+      if (this.isHoldFlying) {
+        if (!wasHoldFlying) {
           const b = this.buttPos();
-          this.fartBurst(b.x, b.y, -this.weakDirX, -this.weakDirY, depleted ? 2 : 5, 120, 4, 8);
+          this.fartBurst(b.x, b.y, 0, 1, 7, 160, 6, 10);
           this.squashX = 0.85;
           this.squashY = 1.15;
-          sfx(depleted ? "attackWeak" : "hop");
-        } else {
-          this.weakLaunchBuffer = Math.max(0, this.weakLaunchBuffer - dt);
         }
-      }
-
-      // Strong launch: double-click/tap (unchanged from before).
-      const jumpTarget = this.input.consumeJump();
-      if (jumpTarget !== null) {
         const screenX = p.x + p.w / 2 - this.cameraX;
-        const screenY = p.y + p.h / 2 - this.cameraY;
-        const dx = jumpTarget.x - screenX;
-        const dy = jumpTarget.y - screenY;
-        const dist = Math.hypot(dx, dy);
-        if (dist < LAUNCH_AIM_MIN_DIST) {
-          this.jumpDirX = 0;
-          this.jumpDirY = -1;
+        const dx = flyHoldTarget!.x - screenX;
+        if (Math.abs(dx) > FLY_HOLD_DEADZONE_PX) {
+          p.vx = Math.sign(dx) * FLY_HOLD_VX_SPEED;
+          p.facing = dx > 0 ? 1 : -1;
         } else {
-          this.jumpDirX = dx / dist;
-          this.jumpDirY = dy / dist;
+          p.vx = 0;
         }
-        this.jumpBuffer = LAUNCH_BUFFER_SEC;
-        this.ripple(jumpTarget.x + this.cameraX, jumpTarget.y + this.cameraY, 26);
-      }
-      if (this.jumpBuffer > 0) {
-        if (p.onGround || poweredFly) {
-          const baseSpeed = this.hasPower("jump") ? JUMP_BOOST_SPEED : JUMP_SPEED;
-          const speed = depleted ? baseSpeed * DEPLETED_JUMP_MULT : baseSpeed;
-          p.vx = this.jumpDirX * speed;
-          p.vy = this.jumpDirY * speed;
-          if (Math.abs(this.jumpDirX) > 0.05) {
-            p.facing = this.jumpDirX > 0 ? 1 : -1;
-          }
-          p.onGround = false;
-          this.weakLaunchBuffer = 0;
-          this.launchTier = "strong";
-          this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingJumpCost);
-          this.stats.jumps++;
-          this.jumpBuffer = 0;
+        p.vy = -FLY_HOLD_VY_SPEED;
+        p.onGround = false;
+        this.weakLaunchBuffer = 0;
+        this.jumpBuffer = 0;
+        this.launchTier = null;
+        this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingFlyCostPerSec * dt);
+        this.stats.flightSec += dt;
+        this.emitFlightJet(dt);
+        if (this.fartingPower <= 0) {
+          this.flightExhausted = true;
           const b = this.buttPos();
-          if (depleted) {
-            this.fartBurst(b.x, b.y, -this.jumpDirX, -this.jumpDirY, 3, 120, 4, 7);
-            sfx("attackWeak");
-          } else {
-            this.fartBurst(b.x, b.y, -this.jumpDirX, -this.jumpDirY, 12, 220, 6, 13);
-            this.floatText(b.x, b.y + 4, STRONG_FART_WORDS[Math.floor(Math.random() * STRONG_FART_WORDS.length)], "#5f8f2f", 22);
-            this.shake = Math.max(this.shake, 3);
-            sfx("jump");
-          }
-          this.squashX = 0.7;
-          this.squashY = 1.3;
+          this.fartBurst(b.x, b.y, 0, 1, 5, 60, 4, 7, "#c8c2ae");
+          this.floatText(p.x + p.w / 2, p.y - 16, "EMPTY!", "#c62f2f", 24);
+          sfx("empty");
+        }
+      } else {
+        if (poweredFly) {
+          p.vy += GRAVITY * FLY_GRAVITY_MULT * dt;
         } else {
-          this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+          p.vy += GRAVITY * dt;
+        }
+
+        // Weak launch: single click/tap.
+        const clickTarget = this.input.consumeClickTarget();
+        if (clickTarget !== null) {
+          const screenX = p.x + p.w / 2 - this.cameraX;
+          const screenY = p.y + p.h / 2 - this.cameraY;
+          const dx = clickTarget.x - screenX;
+          const dy = clickTarget.y - screenY;
+          const dist = Math.hypot(dx, dy);
+          if (dist < LAUNCH_AIM_MIN_DIST) {
+            this.weakDirX = 0;
+            this.weakDirY = -1;
+          } else {
+            this.weakDirX = dx / dist;
+            this.weakDirY = dy / dist;
+          }
+          this.weakLaunchBuffer = LAUNCH_BUFFER_SEC;
+          this.ripple(clickTarget.x + this.cameraX, clickTarget.y + this.cameraY, 16);
+        }
+        if (this.weakLaunchBuffer > 0) {
+          if (p.onGround || poweredFly) {
+            const baseSpeed = WEAK_LAUNCH_SPEED * (this.hasPower("speed") ? SPEED_BOOST_MULT : 1);
+            const speed = depleted ? baseSpeed * DEPLETED_SPEED_MULT : baseSpeed;
+            p.vx = this.weakDirX * speed;
+            p.vy = this.weakDirY * speed;
+            if (Math.abs(this.weakDirX) > 0.05) {
+              p.facing = this.weakDirX > 0 ? 1 : -1;
+            }
+            p.onGround = false;
+            this.launchTier = "weak";
+            this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingWeakLaunchCost);
+            this.stats.hops++;
+            this.weakLaunchBuffer = 0;
+            const b = this.buttPos();
+            this.fartBurst(b.x, b.y, -this.weakDirX, -this.weakDirY, depleted ? 2 : 5, 120, 4, 8);
+            this.squashX = 0.85;
+            this.squashY = 1.15;
+            sfx(depleted ? "attackWeak" : "hop");
+          } else {
+            this.weakLaunchBuffer = Math.max(0, this.weakLaunchBuffer - dt);
+          }
+        }
+
+        // Strong launch: double-click/tap (unchanged from before).
+        const jumpTarget = this.input.consumeJump();
+        if (jumpTarget !== null) {
+          const screenX = p.x + p.w / 2 - this.cameraX;
+          const screenY = p.y + p.h / 2 - this.cameraY;
+          const dx = jumpTarget.x - screenX;
+          const dy = jumpTarget.y - screenY;
+          const dist = Math.hypot(dx, dy);
+          if (dist < LAUNCH_AIM_MIN_DIST) {
+            this.jumpDirX = 0;
+            this.jumpDirY = -1;
+          } else {
+            this.jumpDirX = dx / dist;
+            this.jumpDirY = dy / dist;
+          }
+          this.jumpBuffer = LAUNCH_BUFFER_SEC;
+          this.ripple(jumpTarget.x + this.cameraX, jumpTarget.y + this.cameraY, 26);
+        }
+        if (this.jumpBuffer > 0) {
+          if (p.onGround || poweredFly) {
+            const baseSpeed = this.hasPower("jump") ? JUMP_BOOST_SPEED : JUMP_SPEED;
+            const speed = depleted ? baseSpeed * DEPLETED_JUMP_MULT : baseSpeed;
+            p.vx = this.jumpDirX * speed;
+            p.vy = this.jumpDirY * speed;
+            if (Math.abs(this.jumpDirX) > 0.05) {
+              p.facing = this.jumpDirX > 0 ? 1 : -1;
+            }
+            p.onGround = false;
+            this.weakLaunchBuffer = 0;
+            this.launchTier = "strong";
+            this.fartingPower = Math.max(0, this.fartingPower - tuning.fartingJumpCost);
+            this.stats.jumps++;
+            this.jumpBuffer = 0;
+            const b = this.buttPos();
+            if (depleted) {
+              this.fartBurst(b.x, b.y, -this.jumpDirX, -this.jumpDirY, 3, 120, 4, 7);
+              sfx("attackWeak");
+            } else {
+              this.fartBurst(b.x, b.y, -this.jumpDirX, -this.jumpDirY, 12, 220, 6, 13);
+              this.floatText(b.x, b.y + 4, STRONG_FART_WORDS[Math.floor(Math.random() * STRONG_FART_WORDS.length)], "#5f8f2f", 22);
+              this.shake = Math.max(this.shake, 3);
+              sfx("jump");
+            }
+            this.squashX = 0.7;
+            this.squashY = 1.3;
+          } else {
+            this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+          }
+        }
+
+        if (p.onGround) {
+          // Only slow it once grounded and nothing fired this frame —
+          // otherwise this would cancel an in-flight launch's horizontal
+          // component the instant it starts.
+          const slow = GROUND_FRICTION * dt;
+          p.vx = Math.abs(p.vx) <= slow ? 0 : p.vx - Math.sign(p.vx) * slow;
+          this.launchTier = null;
         }
       }
 
-      if (p.onGround) {
-        // Only slow it once grounded and nothing fired this frame —
-        // otherwise this would cancel an in-flight launch's horizontal
-        // component the instant it starts.
-        const slow = GROUND_FRICTION * dt;
-        p.vx = Math.abs(p.vx) <= slow ? 0 : p.vx - Math.sign(p.vx) * slow;
-        this.launchTier = null;
-      }
     }
 
     if (this.attackCooldown > 0) {
@@ -735,7 +764,7 @@ export class Game {
       this.attackFlash = Math.max(0, this.attackFlash - dt);
     }
     const attackDir = this.input.consumeAttack(p.x + p.w / 2 - this.cameraX);
-    if (attackDir !== null && this.attackCooldown <= 0) {
+    if (attackDir !== null && this.attackCooldown <= 0 && !this.stall) {
       this.performAttack(depleted, attackDir);
     }
 
@@ -749,7 +778,7 @@ export class Game {
     }
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
 
-    this.moveAndCollide(dt, poweredFly);
+    if (!this.stall) this.moveAndCollide(dt, poweredFly);
 
     if (this.invuln <= 0) {
       for (const hazard of this.level.hazards) {
@@ -771,6 +800,7 @@ export class Game {
     this.deadEnemies = this.deadEnemies.filter((d) => d.t < 0.3);
 
     this.collectPickups(dt);
+    if (this.status === "playing" && !this.stall) this.checkStalls();
 
     if (this.status === "playing" && intersects(p, this.level.goal)) {
       this.beginWin();
@@ -954,6 +984,75 @@ export class Game {
     this.checkpointRaise = this.checkpointRaise.map((r) => (r > 0 ? Math.min(1, r + dt * 2.5) : 0));
   }
 
+  // --- stalls ------------------------------------------------------------------
+
+  // Something on the route catches a player standing on the ground.
+  private checkStalls(): void {
+    const p = this.player;
+    if (!p.onGround) return;
+    for (const spot of this.level.stalls) {
+      if (!spot.done && intersects(p, spot)) {
+        this.startStall(spot);
+        return;
+      }
+    }
+  }
+
+  private stallSeconds(spot: Stall): number {
+    switch (spot.kind) {
+      case "npc":
+        return this.tuning.stallNpcSec;
+    }
+  }
+
+  private startStall(spot: Stall): void {
+    const p = this.player;
+    const total = this.stallSeconds(spot);
+    this.stall = { spot, elapsed: 0, remaining: total, total };
+    p.vx = 0;
+    p.vy = 0;
+    p.facing = spot.x + spot.w / 2 >= p.x + p.w / 2 ? 1 : -1;
+    this.isHoldFlying = false;
+    this.weakLaunchBuffer = 0;
+    this.jumpBuffer = 0;
+    this.launchTier = null;
+    this.stats.stalls++;
+    sfx("talk");
+  }
+
+  // Held in place while Holding Power keeps draining. Taps and double-taps
+  // hurry the stall along instead of launching the player.
+  private updateStall(dt: number): void {
+    const st = this.stall!;
+    const p = this.player;
+    p.vx = 0;
+    p.vy = 0;
+    this.isHoldFlying = false;
+    let taps = 0;
+    if (this.input.consumeClickTarget()) taps++;
+    if (this.input.consumeJump()) taps++;
+    const floor = Math.max(0, st.total * STALL_MIN_SHARE - st.elapsed);
+    for (let i = 0; i < taps; i++) {
+      st.remaining = Math.max(floor, st.remaining - STALL_TAP_SEC);
+      this.floatText(p.x + p.w / 2 + rand(-14, 14), p.y - 26, "No thanks!", "#3b5bd6", 18);
+      sfx("hurry");
+    }
+    st.elapsed += dt;
+    st.remaining -= dt;
+    this.stats.stallSec += dt;
+    if (st.remaining <= 0) this.finishStall();
+  }
+
+  private finishStall(): void {
+    const { spot } = this.stall!;
+    this.stall = null;
+    spot.done = true;
+    const cx = spot.x + spot.w / 2;
+    this.floatText(cx, spot.y - 20, "…think about it!", "#6b6b78", 18);
+    this.fartBurst(cx, spot.y + spot.h - 20, 0, -1, 6, 80, 5, 9, "#e8e2d0");
+    sfx("pickup");
+  }
+
   private updateIdle(dt: number): void {
     const p = this.player;
     const idle = p.onGround && p.vx === 0 && !this.isHoldFlying && this.attackFlash <= 0;
@@ -1101,6 +1200,7 @@ export class Game {
     this.stats.deathLog.push({ cause, x: p.x + p.w / 2, t: this.runTime });
     this.dyingCause = cause;
     this.activePowers.clear();
+    this.stall = null;
     this.isHoldFlying = false;
     this.hitStop = cause === "hit" ? 0.12 : 0;
     this.shake = Math.max(this.shake, cause === "fall" ? 4 : cause === "accident" ? 7 : 9);
@@ -1509,11 +1609,18 @@ export class Game {
       ctx.globalAlpha = 1;
     }
 
+    for (const spot of level.stalls) {
+      if (spot.done || !onScreen(spot, 60)) continue;
+      const talking = this.stall?.spot === spot;
+      drawSalesperson(ctx, spot.x + spot.w / 2, spot.y + spot.h, this.elapsed, talking, pc.x < spot.x + spot.w / 2 ? -1 : 1);
+    }
+
     drawToilet(ctx, level.goal, this.elapsed, this.status === "winning" && this.stateTime > 0.9 ? 1 : 0);
 
     this.renderParticles(["puff", "dust"]);
     if (this.status !== "title") this.renderPlayer();
     this.renderParticles(["spark", "ring", "text"]);
+    this.renderStall();
 
     ctx.restore();
 
@@ -1723,6 +1830,38 @@ export class Game {
       ctx.drawImage(img, -w / 2, -h, w, h);
     }
     ctx.restore();
+  }
+
+  // While held up: the salesperson's pitch in a speech bubble, and a ring
+  // over the player's head filling up as the stall runs out.
+  private renderStall(): void {
+    const st = this.stall;
+    if (!st || this.status !== "playing") return;
+    const ctx = this.ctx;
+    const p = this.player;
+    const spot = st.spot;
+    if (spot.kind === "npc") {
+      const line = SALES_PITCH[Math.floor(st.elapsed / 1.6) % SALES_PITCH.length];
+      drawSpeechBubble(ctx, spot.x + spot.w / 2, spot.y - 78, line, 240); // above the hurry ring
+    }
+    const cx = p.x + p.w / 2;
+    const cy = p.y - 56;
+    const done = Math.min(1, st.elapsed / (st.elapsed + Math.max(0, st.remaining)));
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(38,38,46,0.2)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#3b5bd6";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, -Math.PI / 2, -Math.PI / 2 + done * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    if (Math.floor(this.elapsed * 3) % 2 === 0) {
+      handText(ctx, this.isTouch ? "tap to hurry!" : "click to hurry!", cx, cy - 28, 18, "#c62f2f", { font: MARKER_FONT, outline: "#fbf7ea" });
+    }
   }
 
   // Feedback for a press still being decided: a ring that fills over the

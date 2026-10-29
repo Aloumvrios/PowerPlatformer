@@ -19,6 +19,8 @@ export type SfxName =
   | "banana"
   | "rumble"
   | "accident"
+  | "talk"
+  | "hurry"
   | "shield"
   | "death"
   | "checkpoint"
@@ -267,6 +269,13 @@ export function sfx(name: SfxName, intensity = 1, pitch = 1): void {
     case "accident":
       fart({ dur: 1.1, f0: 120, f1: 35, vol: 0.6, flutter: 9, cutoff: 700, noise: 0.6 });
       tone(400, 0.7, 0.2, "square", 0.3, 80);
+      break;
+    case "talk":
+      // A babble of short blips, like a cartoon character talking fast.
+      for (let i = 0; i < 9; i++) tone(rand(280, 520), 0.07, 0.12, "square", i * 0.09);
+      break;
+    case "hurry":
+      tone(rand(600, 760), 0.06, 0.14, "triangle", 0, 900);
       break;
     case "shield":
       tone(1200, 0.25, 0.25, "sine", 0, 300);

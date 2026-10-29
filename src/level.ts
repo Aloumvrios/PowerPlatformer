@@ -95,6 +95,10 @@ export const level1: Level = {
 
   solids: [],
 
+  // Stands on the ground under the second platform: hop up onto the
+  // platforms to get past without being sold anything.
+  stalls: [{ x: 585, y: 440, w: 70, h: 60, kind: "npc", done: false }],
+
   checkpoints: [{ x: 1120, y: 440, w: 26, h: 60, reached: false }],
 
   hints: [
@@ -197,6 +201,9 @@ export const level2: Level = {
     banana(skX(1280), skY(1180) - 22), // on a shaft ledge
     banana(skX(900), skY(860) - 60), // above the street
   ],
+
+  // On the checkpoint block, between the flag and the drop into the tunnel.
+  stalls: [{ x: skX(810), y: skY(1345) - 60, w: 70, h: 60, kind: "npc", done: false }],
 
   checkpoints: [{ x: skX(640), y: skY(1345) - 60, w: 26, h: 60, reached: false }],
 

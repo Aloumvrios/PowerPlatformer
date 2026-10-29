@@ -6,7 +6,7 @@
     },
     "medium": {
       "fartingJumpCost": 10.39,
-      "holdingDrainPerSec": 4.84
+      "holdingDrainPerSec": 5.2
     },
     "hard": {
       "fartingRegenPerSec": 4.81,
