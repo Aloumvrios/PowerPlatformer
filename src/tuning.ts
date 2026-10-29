@@ -23,6 +23,7 @@ export interface Tuning {
   holdingRespawnMin: number; // a respawn never leaves you closer to an accident than this
   // Stalls: seconds each one holds you up if you don't tap to hurry
   stallNpcSec: number; // "do you have time to talk about pants insurance?"
+  stallDoorSec: number; // unlocking a locked door
 }
 
 // The values the game shipped with before difficulties existed, and what
@@ -44,6 +45,7 @@ export const DEFAULT_TUNING: Tuning = {
   holdingBanana: 20,
   holdingRespawnMin: 40,
   stallNpcSec: 4,
+  stallDoorSec: 3,
 };
 
 export type Difficulty = "easy" | "medium" | "hard";

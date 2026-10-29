@@ -183,8 +183,9 @@ export const level2: Level = {
     { x: skX(330), y: skY(1080), w: 30, h: 30, minX: skY(1080), maxX: skY(1330), speed: 70, dir: 1, alive: true, axis: "y" },
     // Patrols the pit.
     { x: skX(250), y: skY(1690), w: 30, h: 30, minX: skX(250), maxX: skX(420) - 30, speed: 60, dir: 1, alive: true },
-    // Crawls along the bottom tunnel.
-    { x: skX(600), y: skY(1790) - 28, w: 44, h: 28, minX: skX(600), maxX: skX(1180) - 44, speed: 70, dir: 1, alive: true, kind: "crawler" },
+    // Crawls along the bottom tunnel, turning back well short of the locked
+    // door so there's a safe spot to stand while unlocking it.
+    { x: skX(600), y: skY(1790) - 28, w: 44, h: 28, minX: skX(600), maxX: skX(1110) - 44, speed: 70, dir: 1, alive: true, kind: "crawler" },
   ],
 
   beans: [
@@ -202,8 +203,12 @@ export const level2: Level = {
     banana(skX(900), skY(860) - 60), // above the street
   ],
 
-  // On the checkpoint block, between the flag and the drop into the tunnel.
-  stalls: [{ x: skX(810), y: skY(1345) - 60, w: 70, h: 60, kind: "npc", done: false }],
+  stalls: [
+    // On the checkpoint block, between the flag and the drop into the tunnel.
+    { x: skX(810), y: skY(1345) - 60, w: 70, h: 60, kind: "npc", done: false },
+    // Locks the bottom tunnel just before the shaft, wall to floor.
+    { ...sk(1220, 1620, 1243, 1790), kind: "door", done: false },
+  ],
 
   checkpoints: [{ x: skX(640), y: skY(1345) - 60, w: 26, h: 60, reached: false }],
 

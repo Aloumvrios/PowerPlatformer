@@ -41,8 +41,10 @@ export interface Enemy extends Rect {
 // "npc": a pants-insurance salesperson; the rect is where they'll catch you,
 // and only a player standing on the ground gets caught, so jumping or flying
 // past avoids them (at a gas cost).
+// "door": a locked door, solid until unlocked; standing against it (on the
+// ground) starts unlocking it. Once open it stays open.
 export interface Stall extends Rect {
-  kind: "npc";
+  kind: "npc" | "door";
   done: boolean;
 }
 

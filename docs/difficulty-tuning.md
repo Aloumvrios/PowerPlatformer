@@ -1,7 +1,7 @@
 # Difficulty tuning
 
 - **generated:** 2026-10-29
-- **command:** npm run sim -- tune --stages stage1 --only medium --sessions 500 --iterations 6
+- **command:** npm run sim -- check --update-baseline
 - **players per stage and difficulty:** 1000
 - **pace:** 1
 
@@ -13,24 +13,24 @@ A player *finishes* if they reach the toilet on their first attempt (one run, al
 
 | | easy | medium | hard |
 |---|---|---|---|
-| Finish rate (first attempt) | 99% ✅ (80%–100%) | 67% ✅ (50%–70%) | 20% ✅ (15%–40%) |
-| Final Holding Power, median | 86.4 ✅ (80–100) | 25.4 ✅ (25–40) | 13.7 ✅ (10–15) |
-| Final Holding Power, p25–p75 | 75.5–92.9 | 11.4–43.7 | 6.6–22.4 |
+| Finish rate (first attempt) | 99% ✅ (80%–100%) | 68% ✅ (50%–70%) | 20% ✅ (15%–40%) |
+| Final Holding Power, median | 86.2 ✅ (80–100) | 25.5 ✅ (25–40) | 14.6 ✅ (10–15) |
+| Final Holding Power, p25–p75 | 75.9–92.9 | 11.8–42.3 | 7.4–23.1 |
 | Players finishing with Holding > 80 | 66% | 0% | 0% |
-| Finish within 3 attempts | 100% | 91% | 38% |
-| Attempts needed (eventual finishers) | 1.01 | 1.34 | 1.68 |
-| Lives lost per first attempt | 0.32 | 1.40 | 2.54 |
-| Time to finish, median (s) | 17.6 | 15.9 | 10.6 |
-| Time to finish, p25–p75 (s) | 13.3–24.3 | 12.0–28.5 | 8.7–21.4 |
-| Lowest Holding Power in run, median | 81.4 | 0.0 | 0.0 |
-| Beans eaten (mean) | 9.0 | 10.4 | 11.1 |
-| Bananas eaten (mean) | 1.36 | 1.68 | 1.75 |
-| Seconds fart-flying (mean) | 4.6 | 6.8 | 8.6 |
+| Finish within 3 attempts | 100% | 92% | 36% |
+| Attempts needed (eventual finishers) | 1.01 | 1.34 | 1.63 |
+| Lives lost per first attempt | 0.31 | 1.40 | 2.54 |
+| Time to finish, median (s) | 17.4 | 16.2 | 10.9 |
+| Time to finish, p25–p75 (s) | 13.3–24.0 | 12.0–29.0 | 8.7–21.4 |
+| Lowest Holding Power in run, median | 81.2 | 0.0 | 0.0 |
+| Beans eaten (mean) | 8.9 | 10.3 | 11.0 |
+| Bananas eaten (mean) | 1.34 | 1.65 | 1.73 |
+| Seconds fart-flying (mean) | 4.5 | 6.7 | 8.5 |
 | Seconds on an empty tank (mean) | 0.0 | 0.0 | 0.0 |
-| Times held up by stalls (mean) | 0.14 | 0.16 | 0.21 |
-| Seconds held up by stalls (mean) | 0.4 | 0.4 | 0.5 |
-| Enemies farted (mean) | 0.07 | 0.08 | 0.08 |
-| Deaths: hit / fall / accident | 322 / 0 / 0 | 352 / 0 / 1051 | 305 / 0 / 2235 |
+| Times held up by stalls (mean) | 0.17 | 0.19 | 0.24 |
+| Seconds held up by stalls (mean) | 0.4 | 0.5 | 0.6 |
+| Enemies farted (mean) | 0.07 | 0.07 | 0.08 |
+| Deaths: hit / fall / accident | 309 / 0 / 0 | 344 / 0 / 1059 | 317 / 0 / 2227 |
 
 ### Tuning values
 
@@ -54,42 +54,43 @@ Bold = changed from the default.
 | `holdingBanana` | 20 | 20 | 20 | **10.11** |
 | `holdingRespawnMin` | 40 | 40 | 40 | **42.68** |
 | `stallNpcSec` | 4 | 4 | 4 | 4 |
+| `stallDoorSec` | 3 | 3 | 3 | 3 |
 
 ### easy: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 100% | 89.8 | 8.8 | 0.09 | 1.47 | 5.2 | 9/0/0 |
-| casual | 99% | 86.3 | 18.0 | 0.34 | 1.31 | 4.6 | 120/0/0 |
-| collector | 100% | 87.8 | 13.8 | 0.17 | 1.39 | 4.0 | 35/0/0 |
-| cautious | 97% | 86.0 | 19.9 | 0.39 | 1.43 | 3.2 | 59/0/0 |
-| newbie | 98% | 79.5 | 29.1 | 0.49 | 1.32 | 5.9 | 99/0/0 |
+| speedrunner | 100% | 89.8 | 8.8 | 0.09 | 1.45 | 5.2 | 9/0/0 |
+| casual | 99% | 86.4 | 17.8 | 0.30 | 1.29 | 4.5 | 106/0/0 |
+| collector | 100% | 88.1 | 13.8 | 0.17 | 1.38 | 4.0 | 34/0/0 |
+| cautious | 97% | 84.9 | 20.3 | 0.43 | 1.46 | 3.3 | 64/0/0 |
+| newbie | 98% | 80.0 | 27.1 | 0.48 | 1.25 | 5.4 | 96/0/0 |
 
-Where first-attempt deaths happen (level x): 1200-1400: 104, 1400-1600: 119, 1600-1800: 57, 2000-2200: 42
+Where first-attempt deaths happen (level x): 1200-1400: 107, 1400-1600: 105, 1600-1800: 58, 2000-2200: 39
 
 ### medium: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
 | speedrunner | 100% | 51.3 | 8.8 | 0.18 | 1.55 | 5.5 | 7/0/11 |
-| casual | 68% | 21.6 | 18.6 | 1.44 | 1.63 | 7.0 | 141/0/363 |
-| collector | 87% | 31.0 | 13.7 | 0.81 | 1.79 | 5.5 | 44/0/117 |
-| cautious | 61% | 20.8 | 23.8 | 1.63 | 1.71 | 5.3 | 66/0/178 |
-| newbie | 33% | 10.7 | 31.6 | 2.38 | 1.70 | 9.3 | 94/0/382 |
+| casual | 68% | 22.7 | 19.8 | 1.48 | 1.61 | 7.1 | 135/0/383 |
+| collector | 88% | 29.8 | 13.7 | 0.78 | 1.75 | 5.5 | 40/0/115 |
+| cautious | 63% | 24.0 | 24.3 | 1.65 | 1.71 | 5.3 | 73/0/175 |
+| newbie | 37% | 11.2 | 32.3 | 2.32 | 1.63 | 8.8 | 89/0/375 |
 
-Where first-attempt deaths happen (level x): 0-200: 4, 200-400: 5, 400-600: 5, 600-800: 15, 800-1000: 24, 1000-1200: 46, 1200-1400: 230, 1400-1600: 218, 1600-1800: 162, 1800-2000: 135, 2000-2200: 226, 2200-2400: 333
+Where first-attempt deaths happen (level x): 0-200: 2, 200-400: 4, 400-600: 7, 600-800: 21, 800-1000: 27, 1000-1200: 48, 1200-1400: 240, 1400-1600: 210, 1600-1800: 154, 1800-2000: 137, 2000-2200: 227, 2200-2400: 326
 
 ### hard: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 94% | 15.7 | 8.7 | 0.59 | 1.77 | 7.1 | 6/0/53 |
-| casual | 9% | 9.6 | 21.5 | 2.82 | 1.69 | 9.3 | 126/0/862 |
-| collector | 27% | 11.0 | 17.7 | 2.42 | 2.25 | 9.0 | 55/0/428 |
-| cautious | 10% | 12.6 | 11.9 | 2.75 | 1.69 | 7.2 | 50/0/362 |
-| newbie | 1% | 1.2 | 37.2 | 2.99 | 1.41 | 8.8 | 68/0/530 |
+| speedrunner | 94% | 16.0 | 8.7 | 0.60 | 1.77 | 7.1 | 6/0/54 |
+| casual | 8% | 9.6 | 20.8 | 2.83 | 1.67 | 9.0 | 132/0/858 |
+| collector | 28% | 11.4 | 18.9 | 2.42 | 2.22 | 9.1 | 59/0/424 |
+| cautious | 10% | 8.5 | 11.9 | 2.75 | 1.67 | 7.0 | 54/0/358 |
+| newbie | 1% | 20.8 | 34.0 | 3.00 | 1.39 | 8.6 | 66/0/533 |
 
-Where first-attempt deaths happen (level x): 0-200: 6, 200-400: 9, 400-600: 16, 600-800: 34, 800-1000: 59, 1000-1200: 127, 1200-1400: 301, 1400-1600: 438, 1600-1800: 439, 1800-2000: 416, 2000-2200: 420, 2200-2400: 275
+Where first-attempt deaths happen (level x): 0-200: 4, 200-400: 10, 400-600: 20, 600-800: 37, 800-1000: 61, 1000-1200: 132, 1200-1400: 323, 1400-1600: 430, 1600-1800: 432, 1800-2000: 411, 2000-2200: 404, 2200-2400: 280
 
 ## Stage 2 (`stage2`)
 
@@ -97,24 +98,24 @@ Where first-attempt deaths happen (level x): 0-200: 6, 200-400: 9, 400-600: 16, 
 
 | | easy | medium | hard |
 |---|---|---|---|
-| Finish rate (first attempt) | 84% ✅ (80%–100%) | 60% ✅ (50%–70%) | 19% ✅ (15%–40%) |
-| Final Holding Power, median | 85.3 ✅ (80–100) | 29.0 ✅ (25–40) | 13.4 ✅ (10–15) |
-| Final Holding Power, p25–p75 | 77.6–92.3 | 15.3–43.0 | 5.9–24.1 |
-| Players finishing with Holding > 80 | 57% | 0% | 0% |
-| Finish within 3 attempts | 99% | 85% | 34% |
-| Attempts needed (eventual finishers) | 1.18 | 1.38 | 1.65 |
-| Lives lost per first attempt | 1.02 | 1.73 | 2.61 |
-| Time to finish, median (s) | 61.6 | 56.9 | 39.9 |
-| Time to finish, p25–p75 (s) | 42.7–78.9 | 36.8–83.4 | 24.4–67.6 |
-| Lowest Holding Power in run, median | 74.8 | 2.4 | 0.0 |
-| Beans eaten (mean) | 9.7 | 9.6 | 5.4 |
-| Bananas eaten (mean) | 0.87 | 0.74 | 0.61 |
-| Seconds fart-flying (mean) | 13.1 | 14.6 | 16.0 |
+| Finish rate (first attempt) | 85% ✅ (80%–100%) | 54% ✅ (50%–70%) | 19% ✅ (15%–40%) |
+| Final Holding Power, median | 84.0 ✅ (80–100) | 27.9 ✅ (25–40) | 13.8 ✅ (10–15) |
+| Final Holding Power, p25–p75 | 75.6–91.0 | 14.0–45.9 | 5.8–23.6 |
+| Players finishing with Holding > 80 | 54% | 0% | 0% |
+| Finish within 3 attempts | 99% | 79% | 31% |
+| Attempts needed (eventual finishers) | 1.16 | 1.42 | 1.56 |
+| Lives lost per first attempt | 0.97 | 1.94 | 2.59 |
+| Time to finish, median (s) | 66.1 | 74.0 | 48.2 |
+| Time to finish, p25–p75 (s) | 47.5–88.5 | 40.9–92.0 | 25.2–68.5 |
+| Lowest Holding Power in run, median | 72.6 | 0.0 | 0.0 |
+| Beans eaten (mean) | 9.5 | 9.5 | 5.2 |
+| Bananas eaten (mean) | 0.88 | 0.67 | 0.51 |
+| Seconds fart-flying (mean) | 12.9 | 14.9 | 14.6 |
 | Seconds on an empty tank (mean) | 0.0 | 0.0 | 0.0 |
-| Times held up by stalls (mean) | 0.17 | 0.18 | 0.24 |
-| Seconds held up by stalls (mean) | 0.4 | 0.5 | 0.6 |
-| Enemies farted (mean) | 0.32 | 0.34 | 0.38 |
-| Deaths: hit / fall / accident | 1016 / 0 / 0 | 1109 / 0 / 617 | 1227 / 0 / 1379 |
+| Times held up by stalls (mean) | 1.07 | 1.13 | 1.16 |
+| Seconds held up by stalls (mean) | 2.1 | 2.2 | 2.3 |
+| Enemies farted (mean) | 0.35 | 0.39 | 0.43 |
+| Deaths: hit / fall / accident | 975 / 0 / 0 | 1102 / 0 / 833 | 1193 / 0 / 1401 |
 
 ### Tuning values
 
@@ -138,40 +139,41 @@ Bold = changed from the default.
 | `holdingBanana` | 20 | 20 | 20 | **5** |
 | `holdingRespawnMin` | 40 | 40 | 40 | 40 |
 | `stallNpcSec` | 4 | 4 | 4 | 4 |
+| `stallDoorSec` | 3 | 3 | 3 | 3 |
 
 ### easy: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 100% | 95.2 | 23.4 | 0.19 | 0.99 | 12.2 | 19/0/0 |
-| casual | 85% | 84.7 | 63.0 | 1.10 | 0.87 | 13.4 | 384/0/0 |
-| collector | 95% | 88.0 | 46.3 | 0.52 | 0.97 | 12.4 | 104/0/0 |
-| cautious | 88% | 78.1 | 78.8 | 1.02 | 0.91 | 12.4 | 153/0/0 |
-| newbie | 61% | 78.5 | 89.9 | 1.78 | 0.66 | 14.2 | 356/0/0 |
+| speedrunner | 100% | 94.7 | 26.9 | 0.10 | 1.03 | 11.4 | 10/0/0 |
+| casual | 87% | 83.5 | 65.8 | 0.96 | 0.90 | 13.1 | 335/0/0 |
+| collector | 98% | 84.9 | 51.5 | 0.53 | 0.97 | 12.5 | 106/0/0 |
+| cautious | 90% | 74.6 | 96.0 | 1.01 | 0.92 | 12.6 | 152/0/0 |
+| newbie | 60% | 77.8 | 99.4 | 1.86 | 0.63 | 14.1 | 372/0/0 |
 
-Where first-attempt deaths happen (level x): 200-400: 528, 400-600: 72, 600-800: 145, 800-1000: 103, 1000-1200: 49, 1200-1400: 119
+Where first-attempt deaths happen (level x): 200-400: 515, 400-600: 88, 600-800: 150, 800-1000: 102, 1000-1200: 37, 1200-1400: 83
 
 ### medium: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 100% | 59.4 | 24.0 | 0.16 | 1.05 | 12.0 | 15/0/1 |
-| casual | 57% | 24.1 | 63.3 | 1.87 | 0.75 | 14.8 | 438/0/216 |
-| collector | 92% | 28.8 | 46.0 | 0.92 | 1.02 | 14.7 | 111/0/72 |
-| cautious | 55% | 21.5 | 94.8 | 2.11 | 0.66 | 14.9 | 172/0/144 |
-| newbie | 17% | 14.2 | 108.2 | 2.79 | 0.35 | 15.3 | 373/0/184 |
+| speedrunner | 100% | 51.1 | 28.0 | 0.13 | 1.10 | 11.2 | 12/0/1 |
+| casual | 57% | 20.7 | 83.3 | 2.04 | 0.72 | 16.5 | 410/0/305 |
+| collector | 86% | 24.8 | 69.3 | 1.29 | 0.97 | 15.7 | 126/0/132 |
+| cautious | 34% | 21.4 | 110.3 | 2.53 | 0.43 | 13.1 | 187/0/192 |
+| newbie | 11% | 14.0 | 101.7 | 2.85 | 0.28 | 14.4 | 367/0/203 |
 
-Where first-attempt deaths happen (level x): 0-200: 39, 200-400: 647, 400-600: 124, 600-800: 147, 800-1000: 112, 1000-1200: 295, 1200-1400: 362
+Where first-attempt deaths happen (level x): 0-200: 33, 200-400: 663, 400-600: 134, 600-800: 151, 800-1000: 106, 1000-1200: 454, 1200-1400: 394
 
 ### hard: by persona
 
 | persona | finish | holding (median) | time (median s) | lives lost | bananas | flying s | deaths hit/fall/accident |
 |---|---|---|---|---|---|---|---|
-| speedrunner | 96% | 22.7 | 24.7 | 0.51 | 1.22 | 14.1 | 20/0/31 |
-| casual | 8% | 6.6 | 67.0 | 2.87 | 0.58 | 16.9 | 461/0/543 |
-| collector | 30% | 8.9 | 63.8 | 2.53 | 0.98 | 20.2 | 172/0/334 |
-| cautious | 3% | 5.6 | 104.3 | 2.97 | 0.46 | 14.2 | 187/0/258 |
-| newbie | 0% | — | — | 3.00 | 0.09 | 12.3 | 387/0/213 |
+| speedrunner | 97% | 22.5 | 25.4 | 0.36 | 1.20 | 12.2 | 17/0/19 |
+| casual | 7% | 4.4 | 70.8 | 2.90 | 0.44 | 15.9 | 460/0/554 |
+| collector | 33% | 8.6 | 66.6 | 2.48 | 0.84 | 18.4 | 156/0/340 |
+| cautious | 1% | 3.1 | 111.3 | 2.99 | 0.28 | 11.9 | 183/0/265 |
+| newbie | 0% | — | — | 3.00 | 0.11 | 11.8 | 377/0/223 |
 
-Where first-attempt deaths happen (level x): 0-200: 30, 200-400: 756, 400-600: 210, 600-800: 207, 800-1000: 144, 1000-1200: 692, 1200-1400: 567
+Where first-attempt deaths happen (level x): 0-200: 25, 200-400: 732, 400-600: 199, 600-800: 215, 800-1000: 134, 1000-1200: 813, 1200-1400: 476
 

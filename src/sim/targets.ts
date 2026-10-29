@@ -53,4 +53,5 @@ export const PARAM_BOUNDS: Partial<Record<keyof Tuning, [number, number]>> = {
   holdingBanana: [5, 40],
   holdingRespawnMin: [15, 60],
   stallNpcSec: [1.5, 8],
+  stallDoorSec: [1, 6],
 };
