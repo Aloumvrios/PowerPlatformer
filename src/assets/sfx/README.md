@@ -23,6 +23,8 @@ its synth version.
 | `accident`   | Holding Power runs out (costs a life)                 |
 | `talk`       | the pants-insurance salesperson catches you           |
 | `hurry`      | each tap to hurry a stall along                       |
+| `keys`       | fumbling with keys at a locked door (and each jiggle) |
+| `unlock`     | a locked door unlocks                                 |
 | `shield`     | shield absorbs a hit                                  |
 | `enemy`      | enemy defeated                                        |
 | `death`      | losing a life                                         |

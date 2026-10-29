@@ -19,6 +19,7 @@ import {
   drawPlatform,
   drawPuffIcon,
   drawSolid,
+  drawLockedDoor,
   drawSalesperson,
   drawSpeechBubble,
   drawSpikes,
@@ -168,6 +169,30 @@ export function stepEnemy(e: Enemy, dt: number): void {
   }
   if (vertical) e.y = pos;
   else e.x = pos;
+}
+
+// Whether a stall catches a player box: only when standing on the ground, and
+// for a (solid) door, when pressed right up against it. Shared with the
+// bots' forward model.
+export function stallCatches(spot: Stall, x: number, y: number, w: number, h: number, onGround: boolean): boolean {
+  if (spot.done || !onGround) return false;
+  const pad = spot.kind === "door" ? 3 : 0;
+  return x - pad < spot.x + spot.w && x + w + pad > spot.x && y < spot.y + spot.h && y + h > spot.y;
+}
+
+// Solid terrain plus any locked doors still in the way.
+export function blockersOf(level: Readonly<Level>): Rect[] {
+  const locked = level.stalls.filter((s) => s.kind === "door" && !s.done);
+  return locked.length ? level.solids.concat(locked) : level.solids;
+}
+
+export function stallSecondsFor(spot: Stall, tuning: Tuning): number {
+  switch (spot.kind) {
+    case "npc":
+      return tuning.stallNpcSec;
+    case "door":
+      return tuning.stallDoorSec;
+  }
 }
 
 function intersects(a: Rect, b: Rect): boolean {
@@ -841,12 +866,13 @@ export class Game {
     const p = this.player;
     const prevBottom = p.y + p.h;
     const impactVy = p.vy;
+    const blockers = blockersOf(this.level);
     p.x += p.vx * dt;
     if (p.x < 0 || p.x > this.level.widthPx - p.w) {
       p.x = Math.max(0, Math.min(p.x, this.level.widthPx - p.w));
       p.vx = 0;
     }
-    for (const s of this.level.solids) {
+    for (const s of blockers) {
       if (p.vx === 0 || !intersects(p, s)) continue;
       p.x = p.vx > 0 ? s.x - p.w : s.x + s.w;
       p.vx = 0;
@@ -857,7 +883,7 @@ export class Game {
       p.y = Math.max(FLY_MIN_Y, p.y);
     }
     p.onGround = false;
-    for (const s of this.level.solids) {
+    for (const s of blockers) {
       if (p.vy === 0 || !intersects(p, s)) continue;
       if (p.vy > 0) {
         p.y = s.y - p.h;
@@ -991,23 +1017,16 @@ export class Game {
     const p = this.player;
     if (!p.onGround) return;
     for (const spot of this.level.stalls) {
-      if (!spot.done && intersects(p, spot)) {
+      if (stallCatches(spot, p.x, p.y, p.w, p.h, p.onGround)) {
         this.startStall(spot);
         return;
       }
     }
   }
 
-  private stallSeconds(spot: Stall): number {
-    switch (spot.kind) {
-      case "npc":
-        return this.tuning.stallNpcSec;
-    }
-  }
-
   private startStall(spot: Stall): void {
     const p = this.player;
-    const total = this.stallSeconds(spot);
+    const total = stallSecondsFor(spot, this.tuning);
     this.stall = { spot, elapsed: 0, remaining: total, total };
     p.vx = 0;
     p.vy = 0;
@@ -1017,7 +1036,7 @@ export class Game {
     this.jumpBuffer = 0;
     this.launchTier = null;
     this.stats.stalls++;
-    sfx("talk");
+    sfx(spot.kind === "door" ? "keys" : "talk");
   }
 
   // Held in place while Holding Power keeps draining. Taps and double-taps
@@ -1034,8 +1053,9 @@ export class Game {
     const floor = Math.max(0, st.total * STALL_MIN_SHARE - st.elapsed);
     for (let i = 0; i < taps; i++) {
       st.remaining = Math.max(floor, st.remaining - STALL_TAP_SEC);
-      this.floatText(p.x + p.w / 2 + rand(-14, 14), p.y - 26, "No thanks!", "#3b5bd6", 18);
-      sfx("hurry");
+      const word = st.spot.kind === "door" ? "*jiggle*" : "No thanks!";
+      this.floatText(p.x + p.w / 2 + rand(-14, 14), p.y - 26, word, "#3b5bd6", 18);
+      sfx(st.spot.kind === "door" ? "keys" : "hurry");
     }
     st.elapsed += dt;
     st.remaining -= dt;
@@ -1048,6 +1068,12 @@ export class Game {
     this.stall = null;
     spot.done = true;
     const cx = spot.x + spot.w / 2;
+    if (spot.kind === "door") {
+      this.floatText(cx, spot.y + spot.h * 0.3, "CLICK!", "#8a5a2b", 24);
+      this.burst("spark", cx, spot.y + spot.h * 0.55, 10, 160, "#f2b705");
+      sfx("unlock");
+      return;
+    }
     this.floatText(cx, spot.y - 20, "…think about it!", "#6b6b78", 18);
     this.fartBurst(cx, spot.y + spot.h - 20, 0, -1, 6, 80, 5, 9, "#e8e2d0");
     sfx("pickup");
@@ -1610,9 +1636,10 @@ export class Game {
     }
 
     for (const spot of level.stalls) {
-      if (spot.done || !onScreen(spot, 60)) continue;
-      const talking = this.stall?.spot === spot;
-      drawSalesperson(ctx, spot.x + spot.w / 2, spot.y + spot.h, this.elapsed, talking, pc.x < spot.x + spot.w / 2 ? -1 : 1);
+      if (!onScreen(spot, 60)) continue;
+      const active = this.stall?.spot === spot;
+      if (spot.kind === "door") drawLockedDoor(ctx, spot, spot.done, active ? this.elapsed : null);
+      else if (!spot.done) drawSalesperson(ctx, spot.x + spot.w / 2, spot.y + spot.h, this.elapsed, active, pc.x < spot.x + spot.w / 2 ? -1 : 1);
     }
 
     drawToilet(ctx, level.goal, this.elapsed, this.status === "winning" && this.stateTime > 0.9 ? 1 : 0);

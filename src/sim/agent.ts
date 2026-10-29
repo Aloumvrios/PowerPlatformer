@@ -5,7 +5,7 @@
 // fan of candidate actions with the forward model, scores them by its
 // persona (progress toward the toilet, pickups, gas cost, risk), picks one,
 // and then performs it with human-ish aim and timing error.
-import { ATTACK_RANGE, DEPLETED_ATTACK_RANGE_MULT, DEPLETED_JUMP_MULT, DEPLETED_SPEED_MULT, FLY_HOLD_DEADZONE_PX, INPUT_GRACE_SEC, JUMP_BOOST_SPEED, JUMP_SPEED, SPEED_BOOST_MULT, WEAK_LAUNCH_SPEED, type Game } from "../game";
+import { ATTACK_RANGE, DEPLETED_ATTACK_RANGE_MULT, DEPLETED_JUMP_MULT, DEPLETED_SPEED_MULT, FLY_HOLD_DEADZONE_PX, INPUT_GRACE_SEC, JUMP_BOOST_SPEED, JUMP_SPEED, SPEED_BOOST_MULT, WEAK_LAUNCH_SPEED, stallSecondsFor, type Game } from "../game";
 import type { InputSource, Point } from "../input";
 import { distanceToGoal } from "../nav";
 import type { Tuning } from "../tuning";
@@ -312,7 +312,7 @@ export class Agent implements InputSource {
         s.plan.kind === "fly"
           ? [run(s.plan, 0, 1 - Math.max(0.1, persona.holdNoise)), run(s.plan, 0, 1 + Math.max(0.1, persona.holdNoise))]
           : [run(s.plan, -spread), run(s.plan, spread)];
-      const bad = variants.filter((v) => v.outcome !== "landed" && v.outcome !== "goal").length;
+      const bad = variants.filter((v) => v.outcome !== "landed" && v.outcome !== "goal" && v.outcome !== "stall").length;
       s.score -= bad * 4 * persona.caution;
     }
     scored.sort((a, b) => b.score - a.score);
@@ -358,10 +358,13 @@ export class Agent implements InputSource {
           ? t.fartingJumpCost
           : t.fartingWeakLaunchCost;
     score -= (gasCost / 25) * persona.economy * (0.5 + gasNeed);
-    if (res.outcome === "stall" && res.stall) {
-      // Getting caught costs time; how much that matters depends on the clock.
+    // Getting caught by an avoidable stall (the salesperson) costs time; how
+    // much that matters depends on the clock. A locked door isn't avoidable
+    // — it's the only way on — so it carries no penalty, or the bot would
+    // rather hover just short of it forever.
+    if (res.outcome === "stall" && res.stall && res.stall.kind !== "door") {
       // Expected length given how fast this persona mashes to hurry it.
-      const full = t.stallNpcSec;
+      const full = stallSecondsFor(res.stall, t);
       const expected = Math.max(full * 0.4, full / (1 + 0.3 * persona.tapRate));
       score -= expected * (0.2 + persona.economy * (0.5 + holdNeed * 1.5));
     }

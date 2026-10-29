@@ -925,6 +925,57 @@ export function drawSalesperson(ctx: CanvasRenderingContext2D, x: number, bottom
   ctx.restore();
 }
 
+// A locked wooden door filling `r` (padlock, keyhole, planks); rattles while
+// `unlocking` is a time, and once `open` is just its frame with the door
+// swung back against it.
+export function drawLockedDoor(ctx: CanvasRenderingContext2D, r: Rect, open: boolean, unlocking: number | null): void {
+  ctx.save();
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  if (open) {
+    // Frame posts and the door folded back flat against the hinge side.
+    sketchLine(ctx, r.x, r.y, r.x, r.y + r.h, 1960, 0.6);
+    sketchLine(ctx, r.x + r.w, r.y, r.x + r.w, r.y + r.h, 1961, 0.6);
+    ctx.fillStyle = "#c8a06a";
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y + 4);
+    ctx.lineTo(r.x - r.w * 0.9, r.y + 12);
+    ctx.lineTo(r.x - r.w * 0.9, r.y + r.h - 6);
+    ctx.lineTo(r.x, r.y + r.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  const shake = unlocking !== null ? Math.sin(unlocking * 45) * 1.2 : 0;
+  ctx.translate(shake, 0);
+  ctx.fillStyle = "#c8a06a";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  hatch(ctx, r, 1962, "#8a5a2b", 7, 0.35);
+  sketchRect(ctx, r, 1963, 0.8);
+  // Planks
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) sketchLine(ctx, r.x + 2, r.y + (r.h * i) / 3, r.x + r.w - 2, r.y + (r.h * i) / 3, 1964 + i, 0.4);
+  // Padlock on the side you approach from (left), with its shackle.
+  const lx = r.x - 4;
+  const ly = r.y + r.h * 0.5;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(lx, ly - 6, 5, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillStyle = "#f2b705";
+  ctx.fillRect(lx - 7, ly - 6, 14, 12);
+  ctx.strokeRect(lx - 7, ly - 6, 14, 12);
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.arc(lx, ly - 1, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(lx - 0.8, ly - 1, 1.6, 4);
+  ctx.restore();
+}
+
 // A hand-drawn speech bubble whose tail points down at (x, y); `text` is
 // wrapped to `maxW`.
 export function drawSpeechBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, maxW: number): void {

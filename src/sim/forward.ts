@@ -12,6 +12,8 @@ import {
   FLY_MIN_Y,
   GRAVITY,
   GROUND_FRICTION,
+  blockersOf,
+  stallCatches,
   stepEnemy,
 } from "../game";
 import type { Level, Rect, Stall } from "../types";
@@ -69,6 +71,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
   let launched = false;
   let landedOn: Rect | null = null;
   let caughtBy: Stall | null = null;
+  const blockers = blockersOf(level); // solids plus locked doors
 
   const result = (outcome: Outcome): ForwardResult => ({
     outcome,
@@ -112,7 +115,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
       x = Math.max(0, Math.min(x, level.widthPx - w));
       vx = 0;
     }
-    for (const s of level.solids) {
+    for (const s of blockers) {
       if (vx === 0 || !hits(x, y, w, h, s)) continue;
       x = vx > 0 ? s.x - w : s.x + s.w;
       vx = 0;
@@ -121,7 +124,7 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
     if (poweredFly || holding) y = Math.max(FLY_MIN_Y, y);
     const wasGround = onGround;
     onGround = false;
-    for (const s of level.solids) {
+    for (const s of blockers) {
       if (vy === 0 || !hits(x, y, w, h, s)) continue;
       if (vy > 0) {
         y = s.y - h;
@@ -169,11 +172,9 @@ export function simulateAction(level: Readonly<Level>, start: ForwardStart, acti
       if (!b.collected && !bananas.includes(i) && hits(gx, gy, w + 12, h + 12, b)) bananas.push(i);
     });
     if (hits(x, y, w, h, level.goal)) return result("goal");
-    // Same rule as Game.checkStalls(): caught while standing on the ground.
-    if (onGround) {
-      caughtBy = level.stalls.find((s) => !s.done && hits(x, y, w, h, s)) ?? null;
-      if (caughtBy) return result("stall");
-    }
+    // Same rule as Game.checkStalls().
+    caughtBy = level.stalls.find((s) => stallCatches(s, x, y, w, h, onGround)) ?? null;
+    if (caughtBy) return result("stall");
     if (y > level.heightPx + 80) return result("fell");
     // At rest on a platform after the action has played out.
     if (onGround && wasGround && vx === 0 && (!fly || t >= fly.sec || farting <= 0)) return result("landed");

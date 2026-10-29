@@ -301,20 +301,27 @@ hero trembles.
 
 Spots that hold the player up for a few seconds while Holding Power keeps
 draining (`level.stalls`, `Stall` in `types.ts`). So far: `"npc"`, the
-pants-insurance salesperson. `checkStalls()` starts one when the player is
-**standing on the ground** inside its rect — jumping or flying past avoids it,
-at a gas cost. While stalled, the movement part of `update()` is skipped (the
+pants-insurance salesperson, and `"door"`, a locked door. `checkStalls()`
+(via `stallCatches()`, shared with the bots) starts one when the player is
+**standing on the ground** inside its rect — jumping or flying past avoids
+the salesperson, at a gas cost — or, for a door, pressed up against it. A
+locked door is solid until unlocked (`blockersOf()` = solids + locked doors,
+used by `moveAndCollide()` and the bots' forward model); the route-distance
+map ignores doors, since they open. Leave a safe spot in front of a door —
+an enemy patrolling right up to it corners the player while they unlock. While stalled, the movement part of `update()` is skipped (the
 player is frozen; hazards, enemies and the meters still run), and taps or
 double-taps go to `updateStall()` instead of launching: each shaves
 `STALL_TAP_SEC` off, but a stall always lasts at least `STALL_MIN_SHARE` of its
-full length (`tuning.stallNpcSec`, per difficulty). Each stall happens once per
+full length (`tuning.stallNpcSec` / `stallDoorSec`, per difficulty). Each stall happens once per
 run (`done` survives a respawn, like checkpoints; a death mid-stall leaves it
 to trigger again). `renderStall()` draws the speech bubble and the "tap to
 hurry" ring. The bots model being caught (`"stall"` outcome in
-`src/sim/forward.ts`), weigh its time cost, and mash taps at their persona's
-`tapRate`. Adding a new kind: extend `Stall["kind"]`, `stallSeconds()`, the
-render/finish branches, a `Tuning` duration (and its `PARAM_BOUNDS`), and the
-bots' cost estimate in `agent.ts`.
+`src/sim/forward.ts`), weigh the time cost of avoidable ones (an unavoidable
+one, like a door, must carry no penalty, or bots hover just short of it), and
+mash taps at their persona's `tapRate`. Adding a new kind: extend
+`Stall["kind"]`, `stallCatches()` and `stallSecondsFor()`, the render/finish
+branches, a `Tuning` duration (and its `PARAM_BOUNDS`), and the bots' cost
+estimate in `agent.ts`.
 
 ### Sprite selection
 
